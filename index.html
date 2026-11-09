@@ -314,10 +314,10 @@ footer a{font-weight:600}
 
 <main>
 <header class="hero" id="top">
-  <div class="eyebrow">Guide personnel · Debian · GitHub → FTP</div>
+  <div class="eyebrow">Guide pratique · Debian · GitHub → FTP</div>
   <h1>Mettre un site en ligne à chaque <code>git push</code></h1>
-  <p class="lead">Tu modifies ton projet sur ton PC, tu fais un commit et un push, et les fichiers modifiés partent tout seuls sur ton hébergement, comme sur Vercel ou Netlify. Ce guide reprend tout ce qu'on a mis en place, les erreurs rencontrées et comment les éviter.</p>
-  <p>Valeurs de ton installation : compte GitHub <code>nadhiroff</code>, serveur FTP <code>srv200.arobase360.com</code>, port <code>21</code>, protocole <code>ftp</code>. Les commandes en noir se copient avec le bouton <b>Copier</b>. Les cadres en pointillés montrent ce que tu dois voir à l'écran.</p>
+  <p class="lead">Tu modifies ton projet sur ton PC, tu fais un commit et un push, et les fichiers modifiés partent tout seuls sur ton hébergement, comme sur Vercel ou Netlify. Ce guide explique toute la mise en place, les erreurs fréquentes et comment les éviter.</p>
+  <p>Dans les commandes, remplace <code>TON-COMPTE</code> par ton nom d'utilisateur GitHub, <code>ftp.ton-hebergeur.com</code> par l'adresse FTP de ton hébergeur et <code>mon-site</code> par le nom de ton dossier. Les commandes en noir se copient avec le bouton <b>Copier</b>. Les cadres en pointillés montrent ce que tu dois voir à l'écran.</p>
   <div class="kit-card">
     <span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#logo"/></svg></span>
     <div><b>Le kit est sur GitHub</b><span class="repo">nadhiroff/kit-deploiement_ftp-github</span></div>
@@ -341,7 +341,7 @@ footer a{font-weight:600}
 </div>
 <p>Trois pièces travaillent ensemble :</p>
 <ul>
-  <li><b>Le dépôt central <code>nadhiroff/deploy-workflows</code></b> sur GitHub. Il contient le moteur de déploiement (<code>deploy.yml</code>). Il existe une seule fois, pour tous tes projets.</li>
+  <li><b>Le dépôt central <code>TON-COMPTE/deploy-workflows</code></b> sur GitHub. Il contient le moteur de déploiement (<code>deploy.yml</code>). Il existe une seule fois, pour tous tes projets.</li>
   <li><b>La commande <code>deploy-init</code></b> sur ton PC. Tu la lances une fois dans chaque projet pour le brancher au moteur.</li>
   <li><b>Dans chaque projet</b>, deux petits fichiers créés par <code>deploy-init</code> : <code>.github/workflows/deploy.yml</code> (10 lignes qui appellent le moteur) et <code>.deployignore</code> (la liste de ce qui ne doit pas aller en ligne).</li>
 </ul>
@@ -386,7 +386,7 @@ footer a{font-weight:600}
   <div class="cmd"><pre>gh auth login</pre></div>
   <p>Réponds avec les flèches et Entrée : <b>GitHub.com</b> → <b>HTTPS</b> → <b>Yes</b> (authentifier Git) → <b>Login with a web browser</b>. Un code s'affiche : ouvre le lien, colle le code, valide.</p>
   <div class="out"><div class="lbl">Tu dois voir à la fin</div><pre>✓ Authentication complete.
-✓ Logged in as nadhiroff</pre></div>
+✓ Logged in as TON-COMPTE</pre></div>
 </div></div>
 
 <div class="step"><div class="n">3</div><div>
@@ -410,19 +410,19 @@ git config --global user.email "ton@email.com"</pre></div>
   <div class="cmd"><pre>mkdir -p ~/.local/bin
 cp ~/Téléchargements/kit-deploiement/deploy-init ~/.local/bin/deploy-init
 chmod +x ~/.local/bin/deploy-init
-grep -q 'DEPLOY_CENTRAL_REPO' ~/.bashrc || echo 'export DEPLOY_CENTRAL_REPO="nadhiroff/deploy-workflows"' &gt;&gt; ~/.bashrc
+grep -q 'DEPLOY_CENTRAL_REPO' ~/.bashrc || echo 'export DEPLOY_CENTRAL_REPO="TON-COMPTE/deploy-workflows"' &gt;&gt; ~/.bashrc
 grep -q '.local/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.bashrc
 source ~/.bashrc</pre></div>
   <p>Vérifie :</p>
   <div class="cmd"><pre>which deploy-init &amp;&amp; echo "$DEPLOY_CENTRAL_REPO"</pre></div>
-  <div class="out"><div class="lbl">Résultat attendu</div><pre>/home/nadhir/.local/bin/deploy-init
-nadhiroff/deploy-workflows</pre></div>
+  <div class="out"><div class="lbl">Résultat attendu</div><pre>/home/toi/.local/bin/deploy-init
+TON-COMPTE/deploy-workflows</pre></div>
 </div></div>
 
 <!-- ============================ CENTRAL ============================ -->
 <h2 id="central">2. Le dépôt central <span class="tag once">une seule fois en tout</span></h2>
 <p>Le moteur vit sur GitHub. Il n'est pas lié à un PC. Commence par vérifier s'il existe déjà :</p>
-<div class="cmd"><pre>gh repo view nadhiroff/deploy-workflows --json name -q .name 2&gt;/dev/null &amp;&amp; echo "✅ existe déjà" || echo "➜ à créer"</pre></div>
+<div class="cmd"><pre>gh repo view TON-COMPTE/deploy-workflows --json name -q .name 2&gt;/dev/null &amp;&amp; echo "✅ existe déjà" || echo "➜ à créer"</pre></div>
 <ul>
   <li><b>« existe déjà »</b> : rien à créer. Passe directement à l'<a href="#central-acces">étape d'accès</a> pour vérifier le réglage.</li>
   <li><b>« à créer »</b> : suis les étapes ci-dessous.</li>
@@ -440,8 +440,8 @@ cd ~</pre></div>
 
 <h3 id="central-acces">Autoriser tes projets à l'utiliser</h3>
 <p>Sans ce réglage, chaque déploiement échoue avec <code>workflow was not found</code>. C'est l'erreur la plus fréquente au premier déploiement d'un projet.</p>
-<div class="cmd"><pre>gh api -X PUT repos/nadhiroff/deploy-workflows/actions/permissions/access -f access_level=user</pre></div>
-<div class="cmd"><pre>gh api repos/nadhiroff/deploy-workflows/actions/permissions/access</pre></div>
+<div class="cmd"><pre>gh api -X PUT repos/TON-COMPTE/deploy-workflows/actions/permissions/access -f access_level=user</pre></div>
+<div class="cmd"><pre>gh api repos/TON-COMPTE/deploy-workflows/actions/permissions/access</pre></div>
 <div class="out"><div class="lbl">Résultat attendu</div><pre>{
   "access_level": "user"
 }</pre></div>
@@ -451,8 +451,8 @@ cd ~</pre></div>
 <p>Le dépôt central est <b>privé</b>. GitHub interdit à un projet <b>public</b> d'utiliser un moteur privé. Tous tes projets branchés doivent donc être <b>privés</b>, ce qui protège aussi ton code et tes fichiers.</p></div>
 
 <h3>Mettre le moteur à jour plus tard</h3>
-<p>Si on améliore <code>deploy.yml</code>, tu le remplaces une fois ici et <b>tous</b> tes projets en profitent. Ce bloc prend le <code>deploy*.yml</code> le plus récent de tes Téléchargements. Il ne copie que si le fichier contient bien la dernière correction, ce qui évite le piège du fichier ancien qu'on a rencontré.</p>
-<div class="cmd"><pre>[ -d ~/deploy-workflows ] || gh repo clone nadhiroff/deploy-workflows ~/deploy-workflows
+<p>Si on améliore <code>deploy.yml</code>, tu le remplaces une fois ici et <b>tous</b> tes projets en profitent. Ce bloc prend le <code>deploy*.yml</code> le plus récent de tes Téléchargements. Il ne copie que si le fichier contient bien la dernière correction, ce qui évite le piège classique du fichier ancien.</p>
+<div class="cmd"><pre>[ -d ~/deploy-workflows ] || gh repo clone TON-COMPTE/deploy-workflows ~/deploy-workflows
 NOUVEAU="$(ls -t ~/Téléchargements/deploy*.yml ~/Téléchargements/kit-deploiement/deploy.yml 2&gt;/dev/null | head -1)"
 echo "Fichier utilisé : $NOUVEAU"
 if grep -q delete-candidates "$NOUVEAU"; then
@@ -463,7 +463,7 @@ else
   echo "❌ Ce fichier est une ancienne version"
 fi</pre></div>
 <p>Vérifier la version qui est vraiment sur GitHub :</p>
-<div class="cmd"><pre>gh api repos/nadhiroff/deploy-workflows/contents/.github/workflows/deploy.yml --jq .content | base64 -d | grep -c delete-candidates</pre></div>
+<div class="cmd"><pre>gh api repos/TON-COMPTE/deploy-workflows/contents/.github/workflows/deploy.yml --jq .content | base64 -d | grep -c delete-candidates</pre></div>
 <div class="out"><div class="lbl">Résultat attendu</div><pre>4</pre></div>
 <p>Un nombre supérieur à 0 signifie que c'est la bonne version. Un <code>0</code> signifie que c'est une ancienne version.</p>
 
@@ -471,26 +471,27 @@ fi</pre></div>
 <h2 id="choisir">Quel est ton cas ?</h2>
 <p>Choisis la situation qui correspond à ton projet. Chaque cas est complet du début à la fin.</p>
 <div class="pick">
-  <a href="#cas-a"><span class="l">A</span><b>Nouveau projet</b><span>Pas de dépôt GitHub, rien sur le serveur. Ex. un dossier <code>mon-site</code> tout neuf.</span></a>
+  <a href="#cas-a"><span class="l">A</span><b>Nouveau projet</b><span>Pas de dépôt GitHub, rien sur le serveur. Ex. <code>nom-de-ton-dossier</code>.</span></a>
   <a href="#cas-b"><span class="l">B</span><b>Dépôt GitHub déjà créé</b><span>Le dépôt existe, mais pas encore de dossier sur ton PC ni sur le serveur.</span></a>
-  <a href="#cas-c"><span class="l">C</span><b>Projet déjà en ligne</b><span>Sur GitHub, sur ton PC et sur le serveur. Ex. <code>calculateur_performance</code>.</span></a>
+  <a href="#cas-c"><span class="l">C</span><b>Projet déjà en ligne</b><span>Sur GitHub, sur ton PC et sur le serveur. Ex. un site déjà publié que tu veux automatiser.</span></a>
   <a href="#cas-d"><span class="l">D</span><b>Seulement sur le serveur</b><span>Le site est en ligne mais tu n'as ni copie locale ni Git.</span></a>
   <a href="#cas-e"><span class="l">E</span><b>Dossier local non relié</b><span>Le dossier est sur ton PC et le dépôt sur GitHub, mais ils ne sont pas reliés.</span></a>
 </div>
 
 <h3>Avant chaque cas : trouver le bon « dossier distant »</h3>
-<p>Ouvre FileZilla, connecte-toi et regarde où tu arrives. Sur ton hébergement arobase360, tu arrives à <code>/</code>, qui est <b>la racine de tous tes sites</b> : <code>accessbenin</code>, <code>formulaire</code>, <code>calculateur_performance</code>…</p>
+<p>Ouvre FileZilla, connecte-toi et regarde où tu arrives. Sur beaucoup d'hébergements mutualisés, tu arrives à <code>/</code>, qui est <b>la racine de tous tes sites</b> : <code>blog</code>, <code>boutique</code>, <code>portfolio</code>…</p>
 <div class="sim">
   <div class="pane"><div class="bar">FILEZILLA · SITE DISTANT /</div><pre>/
 ├── .well-known/
-├── accessbenin/
-├── calculateur_performance/
-├── formulaire/
-├── planning_RGZ/
+├── blog/
+├── mon-app/
+├── boutique/
+├── portfolio/
 ├── .htaccess        ← ne jamais écraser
 └── index.html</pre></div>
   <div class="pane"><div class="bar">QUE RÉPONDRE À « DOSSIER DISTANT »</div><pre><span class="new">/nom_du_projet/</span>   ✅ un dossier par projet
-/public_html/     ❌ n'existe pas ici
+/public_html/     ❌ seulement s'il existe
+                     chez ton hébergeur
 /                 ❌ écraserait la racine
                      et tous tes sites</pre></div>
 </div>
@@ -510,17 +511,17 @@ ls -a</pre></div>
   <h4>Lancer <code>deploy-init</code></h4>
   <div class="cmd"><pre>deploy-init</pre></div>
   <p>Exemple complet de session, avec tes réponses en clair :</p>
-  <div class="out"><div class="lbl">Simulation</div><pre>➜ Aucun dépôt Git dans /home/nadhir/projets/mon-site.
+  <div class="out"><div class="lbl">Simulation</div><pre>➜ Aucun dépôt Git dans /home/toi/projets/mon-site.
 Initialiser un dépôt Git ici ? [o/N] : o
 ✅ Dépôt Git initialisé.
 Nom du dépôt GitHub à créer [mon-site] : mon-site
 Visibilité (private/public) [private] :            ← Entrée = privé
-✅ Dépôt GitHub créé : nadhiroff/mon-site
+✅ Dépôt GitHub créé : TON-COMPTE/mon-site
 Branche qui déclenche le déploiement [main] :      ← Entrée
 Dossier du projet à mettre en ligne (. = tout le projet) [.] :   ← Entrée
 Protocole (ftp/ftps/sftp) [ftps] : ftp
 Port [21] :                                        ← Entrée
-Hôte (ex. ftp.mondomaine.com) : srv200.arobase360.com
+Hôte (ex. ftp.mondomaine.com) : ftp.ton-hebergeur.com
 Identifiant : ton-identifiant-ftp
 Mot de passe (masqué) :                            ← rien ne s'affiche, c'est normal
 Dossier distant [/public_html/] : /mon-site/
@@ -591,19 +592,19 @@ gh run watch</pre></div>
 
 <!-- ============================ CAS B ============================ -->
 <h2 id="cas-b">B. Dépôt GitHub déjà créé <span class="tag">rien sur le PC ni le serveur</span></h2>
-<p>Tu as créé le dépôt sur github.com (par exemple <code>nadhiroff/mon-site</code>), mais tu n'as pas encore de dossier sur ton PC ni de dossier dans FileZilla.</p>
+<p>Tu as créé le dépôt sur github.com (par exemple <code>TON-COMPTE/mon-site</code>), mais tu n'as pas encore de dossier sur ton PC ni de dossier dans FileZilla.</p>
 
 <div class="step"><div class="n">1</div><div>
   <h4>Vérifier que le dépôt est privé</h4>
-  <div class="cmd"><pre>gh repo view nadhiroff/mon-site --json visibility</pre></div>
+  <div class="cmd"><pre>gh repo view TON-COMPTE/mon-site --json visibility</pre></div>
   <p>Si le résultat est <code>"PUBLIC"</code>, passe-le en privé :</p>
-  <div class="cmd"><pre>gh repo edit nadhiroff/mon-site --visibility private</pre></div>
+  <div class="cmd"><pre>gh repo edit TON-COMPTE/mon-site --visibility private</pre></div>
 </div></div>
 
 <div class="step"><div class="n">2</div><div>
   <h4>Récupérer le dépôt sur ton PC</h4>
   <p>« Cloner » crée le dossier local déjà relié à GitHub.</p>
-  <div class="cmd"><pre>mkdir -p ~/projets &amp;&amp; gh repo clone nadhiroff/mon-site ~/projets/mon-site &amp;&amp; cd ~/projets/mon-site</pre></div>
+  <div class="cmd"><pre>mkdir -p ~/projets &amp;&amp; gh repo clone TON-COMPTE/mon-site ~/projets/mon-site &amp;&amp; cd ~/projets/mon-site</pre></div>
   <p>Si le dépôt est vide, Git affiche <code>vous semblez avoir cloné un dépôt vide</code>. C'est normal.</p>
 </div></div>
 
@@ -627,37 +628,37 @@ git commit -m "premiers fichiers du site"</pre></div>
   <div class="cmd"><pre>gh run watch</pre></div>
   <div class="sim">
     <div class="pane"><div class="bar">SERVEUR AVANT</div><pre>/
-├── accessbenin/
-├── formulaire/
-└── planning_RGZ/</pre></div>
+├── blog/
+├── boutique/
+└── portfolio/</pre></div>
     <div class="pane"><div class="bar">SERVEUR APRÈS (F5)</div><pre>/
-├── accessbenin/
-├── formulaire/
+├── blog/
+├── boutique/
 ├── <span class="new">mon-site/</span>
 │   ├── <span class="new">.deploy-state</span>
 │   ├── <span class="new">css/style.css</span>
 │   └── <span class="new">index.html</span>
-└── planning_RGZ/</pre></div>
+└── portfolio/</pre></div>
   </div>
 </div></div>
 
 <!-- ============================ CAS C ============================ -->
 <h2 id="cas-c">C. Projet déjà en ligne <span class="tag">GitHub + PC + serveur</span></h2>
-<p>Exemple réel : <code>calculateur_performance</code>, développé dans <code>/var/www/html/calculateur_performance_a_envoyer/calculateur_performance</code>, dépôt <code>nadhiroff/calculateur_performance</code>, en ligne dans <code>/calculateur_performance/</code>.</p>
+<p>Exemple : un projet <code>mon-app</code>, développé dans <code>~/projets/mon-app</code>, dépôt <code>TON-COMPTE/mon-app</code>, en ligne dans <code>/mon-app/</code>.</p>
 <div class="box danger"><strong class="k">Le risque dans ce cas</strong>
-<p>Le premier déploiement remplace les fichiers du serveur par ceux de Git. Si ton fichier de configuration (accès à la base de données) est dans Git, la version de ton PC <b>écrase celle du serveur</b> et le site perd sa base. C'est ce qui est arrivé avec <code>config/config.php</code>. Il faut donc exclure ces fichiers <b>avant</b> le premier push.</p></div>
+<p>Le premier déploiement remplace les fichiers du serveur par ceux de Git. Si ton fichier de configuration (accès à la base de données) est dans Git, la version de ton PC <b>écrase celle du serveur</b> et le site perd sa base. C'est le cas typique de <code>config/config.php</code>. Il faut donc exclure ces fichiers <b>avant</b> le premier push.</p></div>
 
 <div class="step"><div class="n">1</div><div>
   <h4>Aller dans le bon dossier</h4>
   <p>Le dossier qui contient <code>.git</code>, pas son parent.</p>
-  <div class="cmd"><pre>cd /var/www/html/calculateur_performance_a_envoyer/calculateur_performance
+  <div class="cmd"><pre>cd ~/projets/mon-app
 git rev-parse --show-toplevel
 git remote -v
 git branch --show-current
 gh repo view --json visibility</pre></div>
-  <div class="out"><div class="lbl">Résultat attendu</div><pre>/var/www/html/calculateur_performance_a_envoyer/calculateur_performance
-origin  https://github.com/nadhiroff/calculateur_performance.git (fetch)
-origin  https://github.com/nadhiroff/calculateur_performance.git (push)
+  <div class="out"><div class="lbl">Résultat attendu</div><pre>/home/toi/projets/mon-app
+origin  https://github.com/TON-COMPTE/mon-app.git (fetch)
+origin  https://github.com/TON-COMPTE/mon-app.git (push)
 main
 {"visibility":"PRIVATE"}</pre></div>
 </div></div>
@@ -670,7 +671,7 @@ main
 <div class="step"><div class="n">3</div><div>
   <h4>Repérer les fichiers propres au serveur</h4>
   <div class="cmd"><pre>git ls-files config storage uploads database</pre></div>
-  <div class="out"><div class="lbl">Exemple réel</div><pre>config/.htaccess
+  <div class="out"><div class="lbl">Exemple</div><pre>config/.htaccess
 config/config.php        ← accès BDD : à exclure
 storage/.htaccess</pre></div>
   <p>Exclus tout ce qui contient des identifiants, et tout ce que le site crée lui-même en ligne (fichiers envoyés par les utilisateurs, logs, cache).</p>
@@ -679,16 +680,16 @@ storage/.htaccess</pre></div>
 <div class="step"><div class="n">4</div><div>
   <h4>Brancher avec <code>deploy-init</code></h4>
   <div class="cmd"><pre>deploy-init</pre></div>
-  <p>Réponds <code>ftp</code>, <code>21</code>, <code>srv200.arobase360.com</code>, ton identifiant, ton mot de passe, puis le dossier distant <code>/calculateur_performance/</code>. Quand le script attend, ouvre <code>.deployignore</code> dans un deuxième terminal et ajoute par exemple :</p>
+  <p>Réponds <code>ftp</code>, <code>21</code>, <code>ftp.ton-hebergeur.com</code>, ton identifiant, ton mot de passe, puis le dossier distant <code>/mon-app/</code>. Quand le script attend, ouvre <code>.deployignore</code> dans un deuxième terminal et ajoute par exemple :</p>
   <div class="cmd file"><pre>/config/
-/document_test/
+/brouillons/
 /tests/
 /database/
 /composer.json
 /composer.lock
 /.gitignore
 /.gitattributes</pre></div>
-  <p>Vérifie l'aperçu affiché : aucune ligne ne doit commencer par <code>config/</code>, <code>document_test/</code> ou <code>tests/</code>. <code>calculateur/config/</code> peut rester : ce sont des valeurs par défaut de l'application, sans mot de passe.</p>
+  <p>Vérifie l'aperçu affiché : aucune ligne ne doit commencer par <code>config/</code>, <code>brouillons/</code> ou <code>tests/</code>. Un dossier de configuration qui ne contient que des valeurs par défaut, sans mot de passe, peut rester.</p>
 </div></div>
 
 <div class="step"><div class="n">5</div><div>
@@ -700,7 +701,7 @@ storage/.htaccess</pre></div>
 
 <div class="step"><div class="n">6</div><div>
   <h4>Nettoyer ce qui était parti avant l'exclusion</h4>
-  <p>Si des fichiers privés avaient été envoyés <b>avant</b> que tu les exclues, ils restent sur le serveur, car un fichier exclu n'est jamais supprimé. Supprime-les à la main dans FileZilla (par exemple <code>document_test</code> et <code>tests</code>). Ne touche pas à <code>config</code>.</p>
+  <p>Si des fichiers privés avaient été envoyés <b>avant</b> que tu les exclues, ils restent sur le serveur, car un fichier exclu n'est jamais supprimé. Supprime-les à la main dans FileZilla (par exemple <code>brouillons</code> et <code>tests</code>). Ne touche pas à <code>config</code>.</p>
 </div></div>
 
 <!-- ============================ CAS D ============================ -->
@@ -708,12 +709,12 @@ storage/.htaccess</pre></div>
 <p>Le site tourne en ligne, mais tu n'as rien sur ton PC.</p>
 <div class="step"><div class="n">1</div><div>
   <h4>Télécharger le site</h4>
-  <p>Dans FileZilla, côté gauche, va dans <code>~/projets/</code>. Côté droit, clic droit sur le dossier du site → <b>Télécharger</b>. Tu obtiens par exemple <code>~/projets/planning_RGZ</code>. Garde aussi une copie de sauvegarde à part.</p>
+  <p>Dans FileZilla, côté gauche, va dans <code>~/projets/</code>. Côté droit, clic droit sur le dossier du site → <b>Télécharger</b>. Tu obtiens par exemple <code>~/projets/portfolio</code>. Garde aussi une copie de sauvegarde à part.</p>
 </div></div>
 <div class="step"><div class="n">2</div><div>
   <h4>Garder les identifiants hors de Git</h4>
   <p>Les fichiers téléchargés contiennent les <b>vrais identifiants de production</b>. Ils ne doivent pas aller sur GitHub. Ajoute-les dans <code>.gitignore</code> <b>avant</b> le premier commit : ils ne seront ni sur GitHub, ni envoyés, ni touchés sur le serveur.</p>
-  <div class="cmd"><pre>cd ~/projets/planning_RGZ &amp;&amp; nano .gitignore</pre></div>
+  <div class="cmd"><pre>cd ~/projets/portfolio &amp;&amp; nano .gitignore</pre></div>
   <div class="cmd file"><pre>.env
 .env.*
 config/config.php
@@ -723,14 +724,14 @@ logs/</pre></div>
 </div></div>
 <div class="step"><div class="n">3</div><div>
   <h4>Suivre le cas A</h4>
-  <p>Continue avec le <a href="#cas-a">cas A</a>, à partir de l'étape 2. Pour le dossier distant, mets le dossier existant, par exemple <code>/planning_RGZ/</code>. Au premier déploiement, les fichiers identiques sont renvoyés, ce qui est sans conséquence.</p>
+  <p>Continue avec le <a href="#cas-a">cas A</a>, à partir de l'étape 2. Pour le dossier distant, mets le dossier existant, par exemple <code>/portfolio/</code>. Au premier déploiement, les fichiers identiques sont renvoyés, ce qui est sans conséquence.</p>
 </div></div>
 
 <!-- ============================ CAS E ============================ -->
 <h2 id="cas-e">E. Dossier local non relié au dépôt GitHub</h2>
 <p>Ton dossier existe sur le PC (sans <code>.git</code>) et un dépôt du même projet existe déjà sur GitHub. On récupère l'historique GitHub et on le pose dans ton dossier, sans toucher à tes fichiers.</p>
 <div class="cmd"><pre>cd ~/projets/mon-site
-gh repo clone nadhiroff/mon-site /tmp/relier-depot
+gh repo clone TON-COMPTE/mon-site /tmp/relier-depot
 mv /tmp/relier-depot/.git .
 rm -rf /tmp/relier-depot
 git status</pre></div>
@@ -806,7 +807,7 @@ Supprimés
 <div class="tbl"><table>
 <thead><tr><th>Ligne</th><th>Exclut</th></tr></thead>
 <tbody>
-<tr><td><code>/BISON.xlsx</code></td><td>Ce fichier précis, à la racine</td></tr>
+<tr><td><code>/clients.xlsx</code></td><td>Ce fichier précis, à la racine</td></tr>
 <tr><td><code>/docs/</code></td><td>Le dossier <code>docs</code> à la racine et tout son contenu</td></tr>
 <tr><td><code>tests/</code></td><td>Tout dossier nommé <code>tests</code>, où qu'il soit</td></tr>
 <tr><td><code>*.xlsx</code></td><td>Tous les fichiers Excel, partout</td></tr>
@@ -819,7 +820,7 @@ Supprimés
 <div class="cmd file"><pre># Identifiants et réglages du serveur
 /config/
 # Fichiers de travail
-/document_test/
+/brouillons/
 /tests/
 /database/
 *.md
@@ -835,8 +836,8 @@ Supprimés
 <div class="box warn"><strong class="k">.deployignore ou .gitignore ?</strong>
 <p><b><code>.deployignore</code></b> : le fichier reste sur GitHub mais ne va pas en ligne. C'est le cas pour la documentation, les tests et les fichiers de travail.</p>
 <p id="prive-github"><b><code>.gitignore</code></b> : le fichier ne va <b>nulle part</b>, ni sur GitHub ni en ligne. C'est le cas pour les mots de passe, <code>.env</code> et les données personnelles de clients. Si un tel fichier est déjà commité, retire-le de Git sans l'effacer de ton PC :</p>
-<div class="cmd"><pre>echo "/BISON.xlsx" &gt;&gt; .gitignore
-git rm --cached BISON.xlsx
+<div class="cmd"><pre>echo "/clients.xlsx" &gt;&gt; .gitignore
+git rm --cached clients.xlsx
 git commit -m "retrait d'un fichier privé du dépôt"
 git push</pre></div>
 <p>Le fichier reste dans l'historique Git. C'est sans gravité si le dépôt est privé.</p></div>
@@ -863,7 +864,7 @@ X       ci: configuration du dépl…    Déploiement  main    push</pre></div>
   <div class="sim"><div class="pane"><div class="bar">GITHUB · ACTIONS · RÉSUMÉ</div><pre>Déploiement : 2 envoyé(s), 0 supprimé(s)
 Envoyés
   ./index.php
-  ./src/Controllers/FactureController.php</pre></div></div>
+  ./src/Controllers/ContactController.php</pre></div></div>
 </div></div>
 <div class="step"><div class="n">4</div><div>
   <h4>Sur le serveur et dans le navigateur</h4>
@@ -883,10 +884,10 @@ Envoyés
 <div class="tbl"><table>
 <thead><tr><th>Secret</th><th>Contenu</th><th>Exemple</th></tr></thead>
 <tbody>
-<tr><td><code>FTP_SERVER</code></td><td>Hôte</td><td><code>srv200.arobase360.com</code></td></tr>
+<tr><td><code>FTP_SERVER</code></td><td>Hôte</td><td><code>ftp.ton-hebergeur.com</code></td></tr>
 <tr><td><code>FTP_USERNAME</code></td><td>Identifiant</td><td>ton identifiant FTP</td></tr>
 <tr><td><code>FTP_PASSWORD</code></td><td>Mot de passe</td><td>jamais écrit nulle part</td></tr>
-<tr><td><code>FTP_SERVER_DIR</code></td><td>Dossier distant</td><td><code>/calculateur_performance/</code></td></tr>
+<tr><td><code>FTP_SERVER_DIR</code></td><td>Dossier distant</td><td><code>/mon-app/</code></td></tr>
 </tbody></table></div>
 <p>Toutes ces commandes se lancent dans le dossier du projet :</p>
 <div class="cmd"><pre>gh secret list</pre></div>
@@ -905,7 +906,7 @@ on:
 
 jobs:
   deploy:
-    uses: nadhiroff/deploy-workflows/.github/workflows/deploy.yml@main
+    uses: TON-COMPTE/deploy-workflows/.github/workflows/deploy.yml@main
     with:
       protocol: ftp           # ftp, ftps ou sftp
       port: 21
@@ -922,26 +923,26 @@ jobs:
   <li>Le dépôt central existe déjà : vérifie seulement l'<a href="#central-acces">accès</a>.</li>
   <li>Récupère chaque projet :</li>
 </ol>
-<div class="cmd"><pre>gh repo list nadhiroff --limit 50</pre></div>
-<div class="cmd"><pre>mkdir -p ~/projets &amp;&amp; gh repo clone nadhiroff/calculateur_performance ~/projets/calculateur_performance</pre></div>
+<div class="cmd"><pre>gh repo list TON-COMPTE --limit 50</pre></div>
+<div class="cmd"><pre>mkdir -p ~/projets &amp;&amp; gh repo clone TON-COMPTE/mon-app ~/projets/mon-app</pre></div>
 <p>C'est tout. Les projets déjà branchés <b>n'ont pas besoin</b> de <code>deploy-init</code> : leur workflow et leurs secrets sont sur GitHub. Le prochain <code>git push</code> déploie normalement.</p>
 <div class="box"><p>Les fichiers que tu as mis dans <code>.gitignore</code> (<code>.env</code>, configuration locale) ne sont pas sur GitHub. Recrée-les à la main sur le nouveau PC.</p></div>
 
 <!-- ============================ PROBLEMES ============================ -->
 <h2 id="problemes">Problèmes rencontrés et solutions</h2>
-<p>Tous ces cas sont arrivés pendant la mise en place.</p>
+<p>Les erreurs les plus fréquentes, avec leur solution.</p>
 
 <div class="problem"><h4>workflow was not found … access-to-reusable-workflows</h4>
 <p><b>Cause :</b> le projet n'a pas le droit d'utiliser le moteur central, soit parce que le réglage d'accès manque, soit parce que le projet est public.</p>
-<p><b>Solution :</b> refais l'<a href="#central-acces">étape d'accès</a> et passe le projet en privé avec <code>gh repo edit nadhiroff/PROJET --visibility private</code>. Relance ensuite avec <code>gh workflow run deploy.yml</code>.</p></div>
+<p><b>Solution :</b> refais l'<a href="#central-acces">étape d'accès</a> et passe le projet en privé avec <code>gh repo edit TON-COMPTE/PROJET --visibility private</code>. Relance ensuite avec <code>gh workflow run deploy.yml</code>.</p></div>
 
 <div class="problem"><h4>unknown flag: --accept-visibility-change-consequences</h4>
 <p><b>Cause :</b> ta version de <code>gh</code> est plus ancienne et ne connaît pas cette option.</p>
-<p><b>Solution :</b> lance la commande sans elle : <code>gh repo edit nadhiroff/PROJET --visibility private</code>.</p></div>
+<p><b>Solution :</b> lance la commande sans elle : <code>gh repo edit TON-COMPTE/PROJET --visibility private</code>.</p></div>
 
 <div class="problem"><h4>fatal: ni ceci ni aucun de ses répertoires parents n'est un dépôt git</h4>
 <p><b>Cause :</b> tu es dans le mauvais dossier, souvent le dossier parent du projet.</p>
-<p><b>Solution :</b> va dans le dossier qui contient <code>.git</code> (vérifie avec <code>ls -a</code>). Pour le calculateur : <code>cd /var/www/html/calculateur_performance_a_envoyer/calculateur_performance</code>.</p></div>
+<p><b>Solution :</b> va dans le dossier qui contient <code>.git</code> (vérifie avec <code>ls -a</code>).</p></div>
 
 <div class="problem"><h4>rien à valider, la copie de travail est propre (en mettant à jour le moteur)</h4>
 <p><b>Cause :</b> le fichier copié était l'ancienne version. Le nouveau n'avait pas été téléchargé, ou il portait un autre nom, comme <code>deploy(1).yml</code>.</p>
@@ -970,7 +971,7 @@ jobs:
 <p><b>Solution :</b> ajoute-les dans <code>.deployignore</code>, commite, pousse, puis supprime-les à la main dans FileZilla. Le moteur ne supprime jamais un fichier exclu.</p></div>
 
 <div class="problem"><h4>Un dépôt était public avec des fichiers privés dedans</h4>
-<p><b>Solution :</b> <code>gh repo edit nadhiroff/PROJET --visibility private</code> immédiatement, puis vérifie avec <code>gh repo view nadhiroff/PROJET --json visibility</code>. Si les fichiers sont sensibles, considère qu'ils ont pu être copiés pendant qu'ils étaient publics.</p></div>
+<p><b>Solution :</b> <code>gh repo edit TON-COMPTE/PROJET --visibility private</code> immédiatement, puis vérifie avec <code>gh repo view TON-COMPTE/PROJET --json visibility</code>. Si les fichiers sont sensibles, considère qu'ils ont pu être copiés pendant qu'ils étaient publics.</p></div>
 
 <div class="problem"><h4>.deployignore a perdu mes lignes</h4>
 <p><b>Cause :</b> le projet a été réinitialisé (suppression de <code>.git</code> puis nouveau <code>deploy-init</code>), et un <code>.deployignore</code> neuf a été créé.</p>
@@ -1027,13 +1028,13 @@ jobs:
 <tr><td>Relancer sans commit</td><td><code>gh workflow run deploy.yml</code></td></tr>
 <tr><td>Changer le mot de passe FTP</td><td><code>gh secret set FTP_PASSWORD</code></td></tr>
 <tr><td>Changer le dossier distant</td><td><code>gh secret set FTP_SERVER_DIR --body "/projet/"</code></td></tr>
-<tr><td>Passer un dépôt en privé</td><td><code>gh repo edit nadhiroff/PROJET --visibility private</code></td></tr>
+<tr><td>Passer un dépôt en privé</td><td><code>gh repo edit TON-COMPTE/PROJET --visibility private</code></td></tr>
 <tr><td>Modifier le filtre</td><td><code>nano .deployignore</code></td></tr>
 <tr><td>Voir les fichiers cachés</td><td><code>ls -a</code></td></tr>
 </tbody></table></div>
 
 <footer>
-  <span>Guide du kit de déploiement · mis à jour le 9 novembre 2026 · Moteur : <code>nadhiroff/deploy-workflows</code></span>
+  <span>Guide du kit de déploiement · mis à jour le 9 novembre 2026 · Moteur : <code>TON-COMPTE/deploy-workflows</code></span>
   <a class="gh-link" href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#gh"/></svg>nadhiroff/kit-deploiement_ftp-github</a>
 </footer>
 </main>

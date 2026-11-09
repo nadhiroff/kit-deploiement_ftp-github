@@ -10,7 +10,7 @@ Résumé rapide sur un nouveau PC :
   1. sudo apt install -y git gh rsync unzip
   2. gh auth login
   3. cp deploy-init ~/.local/bin/ && chmod +x ~/.local/bin/deploy-init
-     echo 'export DEPLOY_CENTRAL_REPO="nadhiroff/deploy-workflows"' >> ~/.bashrc
+     echo 'export DEPLOY_CENTRAL_REPO="TON-COMPTE/deploy-workflows"' >> ~/.bashrc
      source ~/.bashrc
   4. Brancher un projet :    cd mon-projet && deploy-init
   5. Au quotidien :          git add . && git commit -m "..." && git push
