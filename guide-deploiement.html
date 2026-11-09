@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Déploiement auto FTP</title>
+<meta name="description" content="Kit et guide pas à pas pour mettre un site en ligne automatiquement sur un hébergement FTP à chaque git push, avec GitHub Actions.">
+<meta name="theme-color" content="#0d6870">
+<meta property="og:title" content="Déploiement auto FTP">
+<meta property="og:description" content="Mettre un site en ligne à chaque git push : GitHub Actions → FTP. Kit gratuit à télécharger.">
+<meta property="og:url" content="https://github.com/nadhiroff/kit-deploiement_ftp-github">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d6870'/%3E%3Cpath d='M9 8h14' stroke='%237fd3db' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M16 21.5V12.5M11.5 17 16 12.5 20.5 17' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Ccircle cx='16' cy='24.5' r='2.6' fill='%23fff'/%3E%3C/svg%3E">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Mise en page : sommaire collant à gauche (une colonne sur téléphone), colonne de lecture de 46rem,
+   blocs de commande « à copier » sombres comme un terminal, sorties simulées en clair. */
+:root{
+  --bg:#f5f7f8; --surface:#ffffff; --fg:#15212b; --muted:#566573; --line:#d9e1e6;
+  --accent:#0d6870; --accent-soft:#e0f0f1; --accent-fg:#ffffff;
+  --warn:#9a5200; --warn-soft:#fff3df; --danger:#b3261e; --danger-soft:#fdeceb; --ok:#1b7a3c; --ok-soft:#e5f5ea;
+  --term-bg:#101a22; --term-fg:#d6e2ea; --term-dim:#8fa3b3; --term-ok:#7ad69a; --term-err:#ff8f86; --term-hi:#7fd3db;
+  --out-bg:#eef2f4;
+  --f-display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"DejaVu Sans Mono",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1419; --surface:#141e25; --fg:#e2eaf0; --muted:#9aabb8; --line:#25333d;
+  --accent:#53c2ca; --accent-soft:#11333a; --accent-fg:#06262a;
+  --warn:#f0a94f; --warn-soft:#30240f; --danger:#ff8f86; --danger-soft:#3a1916; --ok:#74d394; --ok-soft:#10301c;
+  --term-bg:#070c10; --term-fg:#d6e2ea; --term-dim:#8fa3b3; --term-ok:#7ad69a; --term-err:#ff8f86; --term-hi:#7fd3db;
+  --out-bg:#1a262e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1419; --surface:#141e25; --fg:#e2eaf0; --muted:#9aabb8; --line:#25333d;
+  --accent:#53c2ca; --accent-soft:#11333a; --accent-fg:#06262a;
+  --warn:#f0a94f; --warn-soft:#30240f; --danger:#ff8f86; --danger-soft:#3a1916; --ok:#74d394; --ok-soft:#10301c;
+  --term-bg:#070c10; --term-fg:#d6e2ea; --term-dim:#8fa3b3; --term-ok:#7ad69a; --term-err:#ff8f86; --term-hi:#7fd3db;
+  --out-bg:#1a262e; color-scheme:dark}
+
+:root{--hdr:3.5rem; --scrim:rgba(5,15,20,.45)}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:1.0625rem;line-height:1.6;padding-block:0 4rem}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--surface)}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.gutter{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Barre du haut : nom du guide, section en cours, progression de lecture */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:var(--surface);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:78rem;margin:0 auto;height:var(--hdr);display:flex;align-items:center;gap:.9rem}
+.brand{display:flex;align-items:center;gap:.55rem;font-family:var(--f-display);font-weight:800;font-size:1.05rem;color:var(--fg);text-decoration:none;white-space:nowrap}
+.brand-mark{width:1.9rem;height:1.9rem;flex:none;display:block}
+.brand-mark svg{width:100%;height:100%;display:block}
+.brand-text small{display:block;font:600 .68rem var(--f-body);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);line-height:1.1}
+.brand-text{line-height:1.15}
+.gh-link{display:inline-flex;align-items:center;gap:.45rem;flex:none;font:600 .88rem var(--f-body);color:var(--fg);text-decoration:none;
+  border:1px solid var(--line);border-radius:8px;padding:.42rem .75rem;background:var(--bg);transition:border-color .15s,color .15s}
+.gh-link:hover{border-color:var(--accent);color:var(--accent)}
+.gh-link svg{width:1.05rem;height:1.05rem;flex:none}
+.crumb{flex:1;min-width:0;display:flex;align-items:center;gap:.5rem;color:var(--muted);font-size:.93rem;white-space:nowrap;overflow:hidden}
+.crumb .sep{color:var(--line)}
+.crumb .grp-name{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+.crumb .cur{color:var(--fg);font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.menu-btn{display:none;align-items:center;gap:.45rem;font:600 .9rem var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.4rem .7rem;cursor:pointer;flex:none}
+.menu-btn svg{width:1.05rem;height:1.05rem}
+.progress{height:2px;background:transparent;position:relative}
+.progress>i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);transition:width .1s linear}
+
+.shell{max-width:78rem;margin:0 auto;display:grid;grid-template-columns:16.5rem minmax(0,1fr);gap:3.5rem}
+
+/* Sommaire latéral */
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--hdr) + 2px);align-self:start;
+  max-height:calc(100vh - var(--hdr) - 2px - env(safe-area-inset-top,0px));overflow-y:auto;overscroll-behavior:contain;
+  padding-block:1.6rem 2rem;padding-right:.5rem;scrollbar-width:thin}
+.toc-top{display:flex;align-items:center;justify-content:space-between;margin:0 0 .7rem;padding-left:.75rem}
+nav.toc h2{font-family:var(--f-body);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0}
+.toc-close{display:none;font:600 .85rem var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.3rem .65rem;cursor:pointer}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:.1rem;border-left:1px solid var(--line)}
+nav.toc li{margin:0}
+nav.toc a{position:relative;display:block;padding:.34rem .75rem;margin-left:-1px;border-left:2px solid transparent;border-radius:0 6px 6px 0;
+  text-decoration:none;color:var(--muted);font-size:.94rem;line-height:1.35;transition:color .15s,background-color .15s,border-color .15s}
+nav.toc a:hover{color:var(--fg);background:var(--accent-soft)}
+nav.toc a[aria-current="true"]{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);font-weight:700}
+nav.toc .grp{margin:.9rem 0 .2rem;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding-left:.75rem;transition:color .15s}
+nav.toc .grp.on{color:var(--accent)}
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:65}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0}
+  .menu-btn{display:inline-flex}
+  .brand-text{display:none}
+  .gh-link span{display:none}
+  .gh-link{padding:.42rem .5rem}
+  .crumb .grp-name,.crumb .sep.first{display:none}
+  nav.toc{position:fixed;top:0;bottom:0;left:0;z-index:70;width:min(20rem,86vw);max-height:none;background:var(--surface);
+    border-right:1px solid var(--line);transform:translateX(-105%);visibility:hidden;transition:transform .22s ease,visibility 0s .22s;
+    padding:calc(env(safe-area-inset-top,0px) + 1rem) 1rem calc(env(safe-area-inset-bottom,0px) + 1.5rem) max(1rem,env(safe-area-inset-left,0px))}
+  body.nav-open nav.toc{transform:none;visibility:visible;transition:transform .22s ease}
+  body.nav-open{overflow:hidden}
+  .toc-close{display:inline-block}
+}
+@media (prefers-reduced-motion:reduce){nav.toc,nav.toc a,.progress>i{transition:none!important}}
+
+main{min-width:0;max-width:46rem;padding-top:2.25rem}
+header.hero{padding-bottom:.5rem}
+.eyebrow{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2rem,5vw,2.9rem);line-height:1.08;margin:.4rem 0 .8rem;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:800;font-size:1.65rem;line-height:1.2;margin:3.5rem 0 .6rem;text-wrap:balance;
+  scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--hdr) + 1.25rem);padding-top:1.5rem;border-top:1px solid var(--line)}
+h3{font-family:var(--f-display);font-weight:600;font-size:1.2rem;margin:2rem 0 .4rem;scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--hdr) + 1.25rem)}
+header.hero{scroll-margin-top:calc(env(safe-area-inset-top,0px) + var(--hdr) + 1rem)}
+h4{font-size:1rem;margin:1.4rem 0 .3rem}
+p{margin:.6rem 0}
+.lead{font-size:1.15rem;color:var(--muted)}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--accent-soft);padding:.08em .35em;border-radius:4px;overflow-wrap:anywhere}
+ul,ol.steps{padding-left:1.3rem}
+li{margin:.25rem 0}
+
+/* Étiquette de section : nouveau / existant / etc. */
+.tag{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;background:var(--accent-soft);color:var(--accent);vertical-align:middle}
+.tag.once{background:var(--warn-soft);color:var(--warn)}
+
+/* Étapes numérotées (vraie séquence) */
+.step{display:grid;grid-template-columns:2.2rem minmax(0,1fr);gap:.8rem;margin:1.4rem 0}
+.step>.n{width:2.2rem;height:2.2rem;border-radius:50%;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-weight:700;font-family:var(--f-display)}
+.step>div{min-width:0}
+.step h4{margin:.25rem 0 .3rem;font-size:1.05rem}
+
+/* Commandes à copier : barre d'en-tête (type + bouton) au-dessus du code, jamais par-dessus */
+.cmd{margin:.7rem 0;background:var(--term-bg);border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px rgba(255,255,255,.04) inset}
+.cmd-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.3rem .35rem .3rem .85rem;border-bottom:1px solid rgba(255,255,255,.07)}
+.cmd-kind{display:flex;align-items:center;gap:.45rem;font:600 .7rem var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--term-dim)}
+.cmd-kind::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:var(--term-hi);opacity:.75}
+.cmd.file .cmd-kind::before{background:var(--term-dim)}
+.cmd pre{margin:0;color:var(--term-fg);font-family:var(--f-mono);font-size:.86rem;line-height:1.6;
+  padding:.8rem 1rem .9rem;overflow-x:auto;white-space:pre;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.cmd pre::before{content:"$ ";color:var(--term-dim)}
+.cmd.file pre::before{content:none}
+.copy{display:inline-flex;align-items:center;gap:.4rem;flex:none;min-height:2rem;font:600 .8rem var(--f-body);color:var(--term-fg);
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:.3rem .7rem;cursor:pointer;
+  transition:background-color .15s,color .15s,border-color .15s;-webkit-tap-highlight-color:transparent}
+.copy svg{width:.95rem;height:.95rem;flex:none}
+.copy:hover{background:var(--term-hi);border-color:var(--term-hi);color:#05242a}
+.copy.done{background:var(--term-ok);border-color:var(--term-ok);color:#05240f}
+@media (max-width:620px){.cmd pre{font-size:.8rem;padding:.75rem .85rem .85rem}}
+
+/* Bloc « télécharger le kit » */
+.kit-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:1rem 1.1rem;align-items:center;margin:1.4rem 0 .5rem;padding:1.1rem 1.2rem;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(10,30,40,.04),0 8px 24px -16px rgba(10,30,40,.25)}
+.kit-card .logo{width:3.2rem;height:3.2rem}
+.kit-card .logo svg{width:100%;height:100%;display:block}
+.kit-card b{display:block;font-family:var(--f-display);font-size:1.12rem;line-height:1.25}
+.kit-card .repo{font:500 .84rem var(--f-mono);color:var(--muted);overflow-wrap:anywhere}
+.kit-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.6rem}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:2.6rem;padding:.5rem 1rem;border-radius:9px;
+  font:700 .95rem var(--f-body);text-decoration:none;border:1px solid transparent;transition:filter .15s,border-color .15s,background-color .15s}
+.btn svg{width:1.1rem;height:1.1rem;flex:none}
+.btn.primary{background:var(--accent);color:var(--accent-fg)}
+.btn.primary:hover{filter:brightness(1.1)}
+.btn.ghost{background:var(--bg);color:var(--fg);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
+@media (max-width:480px){.kit-actions .btn{flex:1 1 100%}}
+
+/* Résultat attendu (simulation) */
+.out{margin:.4rem 0 .9rem;border:1px dashed var(--line);border-radius:8px;background:var(--out-bg);overflow:hidden}
+.out .lbl{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.4rem .8rem 0;font-weight:700}
+.out pre{margin:0;padding:.4rem .8rem .8rem;font-family:var(--f-mono);font-size:.82rem;line-height:1.5;overflow-x:auto;white-space:pre;color:var(--fg)}
+
+/* Encadrés */
+.box{border-radius:8px;padding:.8rem 1rem;margin:1rem 0;border:1px solid var(--line);background:var(--surface)}
+.box p:first-child{margin-top:0}.box p:last-child{margin-bottom:0}
+.box.warn{background:var(--warn-soft);border-color:transparent}
+.box.danger{background:var(--danger-soft);border-color:transparent}
+.box.ok{background:var(--ok-soft);border-color:transparent}
+.box strong.k{display:block;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.2rem}
+.box.warn strong.k{color:var(--warn)}.box.danger strong.k{color:var(--danger)}.box.ok strong.k{color:var(--ok)}
+
+/* Tableaux */
+.tbl{overflow-x:auto;margin:.8rem 0}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td code{white-space:nowrap}
+
+/* Schéma du principe */
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.5rem;margin:1.2rem 0}
+.flow .node{flex:1 1 9rem;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.7rem .8rem}
+.flow .node b{display:block;font-family:var(--f-display);font-size:1rem}
+.flow .node span{font-size:.88rem;color:var(--muted)}
+.flow .arr{align-self:center;color:var(--accent);font-weight:700;font-size:1.3rem}
+@media (max-width:620px){.flow{flex-direction:column}.flow .node{flex:none}.flow .arr{transform:rotate(90deg);line-height:1}}
+
+/* Choix du scénario */
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.8rem;margin:1rem 0}
+.pick a{display:block;text-decoration:none;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:.8rem .9rem}
+.pick a:hover{border-color:var(--accent)}
+.pick .l{font-family:var(--f-display);font-weight:800;color:var(--accent);font-size:1.4rem;line-height:1}
+.pick b{display:block;margin:.3rem 0 .15rem}
+.pick span{font-size:.9rem;color:var(--muted)}
+
+/* Simulation FileZilla / GitHub */
+.sim{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.8rem;margin:.8rem 0}
+.pane{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;min-width:0}
+.pane .bar{font-size:.78rem;font-weight:700;padding:.4rem .7rem;border-bottom:1px solid var(--line);color:var(--muted);letter-spacing:.04em}
+.pane pre{margin:0;padding:.6rem .7rem;font-family:var(--f-mono);font-size:.8rem;line-height:1.55;overflow-x:auto;white-space:pre}
+.new{color:var(--ok);font-weight:600}.gone{color:var(--danger);text-decoration:line-through}.keep{color:var(--muted)}
+
+.problem{border-top:1px solid var(--line);padding-top:.9rem;margin-top:1.1rem}
+.problem h4{margin:0 0 .2rem;font-family:var(--f-mono);font-size:.88rem;color:var(--danger);font-weight:600;overflow-wrap:anywhere}
+.problem p{margin:.25rem 0}
+
+/* Tableaux en fiches sur téléphone */
+@media (max-width:640px){
+  .tbl{overflow:visible}
+  .tbl table,.tbl tbody,.tbl tr,.tbl td{display:block;width:100%}
+  .tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .tbl tr{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:.55rem .8rem;margin:.6rem 0}
+  .tbl td{border:0;padding:.2rem 0}
+  .tbl td[data-label]::before{content:attr(data-label);display:block;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.05rem}
+  .tbl td code{white-space:normal}
+}
+@media (max-width:620px){
+  body{font-size:1rem}
+  h2{font-size:1.4rem;margin-top:2.75rem}
+  .step{grid-template-columns:1.9rem minmax(0,1fr);gap:.65rem}
+  .step>.n{width:1.9rem;height:1.9rem;font-size:.9rem}
+  .box{padding:.75rem .85rem}
+}
+.step>.n{box-shadow:0 0 0 4px var(--accent-soft)}
+.pick a{transition:border-color .15s,transform .15s,box-shadow .15s}
+.pick a:hover{transform:translateY(-1px);box-shadow:0 6px 18px -12px rgba(10,30,40,.35)}
+@media (prefers-reduced-motion:reduce){.pick a{transition:none}.pick a:hover{transform:none}}
+
+footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem;display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;justify-content:space-between}
+footer a{font-weight:600}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- Logo : une barre (le serveur) qui reçoit une flèche partie d'un commit -->
+    <symbol id="logo" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="8" fill="#0d6870"/>
+      <rect x="1" y="1" width="30" height="30" rx="7" fill="none" stroke="#ffffff" stroke-opacity=".12"/>
+      <path d="M9 8h14" stroke="#7fd3db" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M16 21.5V12.5M11.5 17 16 12.5 20.5 17" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <circle cx="16" cy="24.5" r="2.6" fill="#ffffff"/>
+    </symbol>
+    <symbol id="gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol>
+    <symbol id="dl" viewBox="0 0 20 20"><path d="M10 3v10M5.5 8.5 10 13l4.5-4.5M4 17h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  </defs>
+</svg>
+
+<div class="topbar">
+  <div class="topbar-in gutter">
+    <button class="menu-btn" id="menu-btn" type="button" aria-controls="toc" aria-expanded="false">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      <span>Sommaire</span>
+    </button>
+    <a class="brand" href="#top" aria-label="Kit de déploiement, retour en haut">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#logo"/></svg></span>
+      <span class="brand-text">Kit de déploiement<small>GitHub → FTP</small></span>
+    </a>
+    <div class="crumb" aria-live="polite">
+      <span class="sep first" aria-hidden="true">/</span>
+      <span class="grp-name" id="crumb-grp"></span>
+      <span class="sep" id="crumb-sep" aria-hidden="true" hidden>›</span>
+      <span class="cur" id="crumb-cur">Introduction</span>
+    </div>
+    <a class="gh-link" href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener" aria-label="Le kit sur GitHub">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#gh"/></svg><span>GitHub</span>
+    </a>
+  </div>
+  <div class="progress" aria-hidden="true"><i id="progress"></i></div>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="shell gutter">
+<nav class="toc" id="toc" aria-label="Sommaire">
+  <div class="toc-top"><h2>Sommaire</h2><button class="toc-close" id="toc-close" type="button">Fermer</button></div>
+  <ol>
+    <li class="grp">Comprendre</li>
+    <li><a href="#principe">Le principe</a></li>
+    <li><a href="#kit">Le contenu du kit</a></li>
+    <li class="grp">Une seule fois</li>
+    <li><a href="#installation">1. Installer sur un PC</a></li>
+    <li><a href="#central">2. Le dépôt central</a></li>
+    <li class="grp">Brancher un projet</li>
+    <li><a href="#choisir">Quel est ton cas ?</a></li>
+    <li><a href="#cas-a">A. Nouveau projet</a></li>
+    <li><a href="#cas-b">B. Dépôt GitHub déjà créé</a></li>
+    <li><a href="#cas-c">C. Projet déjà en ligne</a></li>
+    <li><a href="#cas-d">D. Projet seulement sur le serveur</a></li>
+    <li><a href="#cas-e">E. Dossier local non relié</a></li>
+    <li class="grp">Au quotidien</li>
+    <li><a href="#quotidien">Travailler chaque jour</a></li>
+    <li><a href="#fichiers">Nouveaux, modifiés, supprimés</a></li>
+    <li><a href="#deployignore">Choisir ce qui part</a></li>
+    <li><a href="#verifier">Vérifier un déploiement</a></li>
+    <li><a href="#secrets">Identifiants FTP</a></li>
+    <li class="grp">Le reste</li>
+    <li><a href="#nouveau-pc">Changer de PC</a></li>
+    <li><a href="#problemes">Problèmes et solutions</a></li>
+    <li><a href="#alternatives">Autres méthodes</a></li>
+    <li><a href="#memo">Aide-mémoire</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero" id="top">
+  <div class="eyebrow">Guide personnel · Debian · GitHub → FTP</div>
+  <h1>Mettre un site en ligne à chaque <code>git push</code></h1>
+  <p class="lead">Tu modifies ton projet sur ton PC, tu fais un commit et un push, et les fichiers modifiés partent tout seuls sur ton hébergement, comme sur Vercel ou Netlify. Ce guide reprend tout ce qu'on a mis en place, les erreurs rencontrées et comment les éviter.</p>
+  <p>Valeurs de ton installation : compte GitHub <code>nadhiroff</code>, serveur FTP <code>srv200.arobase360.com</code>, port <code>21</code>, protocole <code>ftp</code>. Les commandes en noir se copient avec le bouton <b>Copier</b>. Les cadres en pointillés montrent ce que tu dois voir à l'écran.</p>
+  <div class="kit-card">
+    <span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><use href="#logo"/></svg></span>
+    <div><b>Le kit est sur GitHub</b><span class="repo">nadhiroff/kit-deploiement_ftp-github</span></div>
+    <div class="kit-actions">
+      <a class="btn primary" href="https://github.com/nadhiroff/kit-deploiement_ftp-github/archive/refs/heads/main.zip"><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#dl"/></svg>Télécharger le kit (.zip)</a>
+      <a class="btn ghost" href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#gh"/></svg>Voir le dépôt</a>
+    </div>
+  </div>
+</header>
+
+<!-- ============================ PRINCIPE ============================ -->
+<h2 id="principe">Le principe</h2>
+<div class="flow" role="img" aria-label="Ton PC envoie à GitHub, GitHub Actions calcule les différences puis envoie au serveur FTP">
+  <div class="node"><b>Ton PC</b><span>tu codes, puis <code>git push</code></span></div>
+  <div class="arr" aria-hidden="true">→</div>
+  <div class="node"><b>GitHub</b><span>reçoit le code du projet</span></div>
+  <div class="arr" aria-hidden="true">→</div>
+  <div class="node"><b>GitHub Actions</b><span>trie et compare les fichiers</span></div>
+  <div class="arr" aria-hidden="true">→</div>
+  <div class="node"><b>Ton hébergeur</b><span>reçoit seulement ce qui a changé</span></div>
+</div>
+<p>Trois pièces travaillent ensemble :</p>
+<ul>
+  <li><b>Le dépôt central <code>nadhiroff/deploy-workflows</code></b> sur GitHub. Il contient le moteur de déploiement (<code>deploy.yml</code>). Il existe une seule fois, pour tous tes projets.</li>
+  <li><b>La commande <code>deploy-init</code></b> sur ton PC. Tu la lances une fois dans chaque projet pour le brancher au moteur.</li>
+  <li><b>Dans chaque projet</b>, deux petits fichiers créés par <code>deploy-init</code> : <code>.github/workflows/deploy.yml</code> (10 lignes qui appellent le moteur) et <code>.deployignore</code> (la liste de ce qui ne doit pas aller en ligne).</li>
+</ul>
+<p>Les identifiants FTP ne sont dans <b>aucun fichier</b>. Ils sont rangés, chiffrés, dans les <b>secrets GitHub</b> de chaque projet.</p>
+
+<h3>Ce qui part en ligne, et ce qui ne part pas</h3>
+<p>Quatre filtres s'appliquent dans cet ordre :</p>
+<ol>
+  <li>Seuls les fichiers <b>commités et poussés</b> dans Git. Un fichier dans <code>.gitignore</code> ne part jamais.</li>
+  <li>Seulement le <b>dossier choisi</b> (par défaut tout le projet, noté <code>.</code>).</li>
+  <li>Moins ce qui est listé dans <b><code>.deployignore</code></b>.</li>
+  <li>Moins les exclusions de sécurité, toujours actives : <code>.git</code>, <code>.github</code>, <code>.env</code>, <code>.env.*</code>, <code>node_modules</code>, <code>.deployignore</code>.</li>
+</ol>
+<p>À chaque déploiement, le moteur compare avec le déploiement précédent. Il envoie les fichiers <b>nouveaux ou modifiés</b> et supprime du serveur les fichiers <b>supprimés de Git</b>. Un fichier exclu par <code>.deployignore</code> n'est <b>jamais</b> ni envoyé, ni modifié, ni supprimé.</p>
+
+<!-- ============================ KIT ============================ -->
+<h2 id="kit">Le contenu du kit</h2>
+<p>Le dépôt <a href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener"><code>nadhiroff/kit-deploiement_ftp-github</code></a> contient tout ce qu'il faut pour tout refaire sur n'importe quel PC :</p>
+<div class="tbl"><table>
+  <thead><tr><th>Fichier</th><th>Rôle</th><th>Où il va</th></tr></thead>
+  <tbody>
+    <tr><td><code>deploy.yml</code></td><td>Le moteur de déploiement</td><td>Dans le dépôt GitHub <code>deploy-workflows</code>, dossier <code>.github/workflows/</code></td></tr>
+    <tr><td><code>deploy-init</code></td><td>La commande qui branche un projet</td><td>Sur ton PC, dans <code>~/.local/bin/</code></td></tr>
+    <tr><td><code>guide-deploiement.html</code></td><td>Ce guide, lisible hors ligne</td><td>Où tu veux. Double-clic pour l'ouvrir</td></tr>
+    <tr><td><code>LISEZMOI.txt</code></td><td>Le résumé en 10 lignes</td><td>Avec le reste</td></tr>
+  </tbody>
+</table></div>
+<div class="box"><p>Le kit est public et ne contient <b>aucun mot de passe</b> : les identifiants FTP restent dans les secrets GitHub de chaque projet. Tu peux le récupérer à tout moment depuis <a href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener">GitHub</a>.</p></div>
+
+<!-- ============================ INSTALLATION ============================ -->
+<h2 id="installation">1. Installer sur un PC <span class="tag once">une seule fois par PC</span></h2>
+<p>À faire sur chaque nouvel ordinateur Debian ou Ubuntu.</p>
+
+<div class="step"><div class="n">1</div><div>
+  <h4>Installer les outils</h4>
+  <p><code>git</code> gère les versions, <code>gh</code> pilote GitHub depuis le terminal, <code>rsync</code> sert à l'aperçu, <code>unzip</code> ouvre le kit.</p>
+  <div class="cmd"><pre>sudo apt update &amp;&amp; sudo apt install -y git gh rsync unzip</pre></div>
+</div></div>
+
+<div class="step"><div class="n">2</div><div>
+  <h4>Te connecter à GitHub</h4>
+  <div class="cmd"><pre>gh auth login</pre></div>
+  <p>Réponds avec les flèches et Entrée : <b>GitHub.com</b> → <b>HTTPS</b> → <b>Yes</b> (authentifier Git) → <b>Login with a web browser</b>. Un code s'affiche : ouvre le lien, colle le code, valide.</p>
+  <div class="out"><div class="lbl">Tu dois voir à la fin</div><pre>✓ Authentication complete.
+✓ Logged in as nadhiroff</pre></div>
+</div></div>
+
+<div class="step"><div class="n">3</div><div>
+  <h4>Donner ton identité à Git</h4>
+  <p>C'est le nom qui apparaît sur tes commits. Remplace par tes vraies informations.</p>
+  <div class="cmd"><pre>git config --global user.name "Ton Nom"
+git config --global user.email "ton@email.com"</pre></div>
+</div></div>
+
+<div class="step"><div class="n">4</div><div>
+  <h4>Récupérer le kit depuis GitHub</h4>
+  <p>Le kit est sur <a href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener"><code>github.com/nadhiroff/kit-deploiement_ftp-github</code></a>. Cette commande le télécharge dans <code>~/Téléchargements/kit-deploiement</code>, ou le met à jour s'il y est déjà :</p>
+  <div class="cmd"><pre>K=~/Téléchargements/kit-deploiement; [ -d "$K/.git" ] &amp;&amp; git -C "$K" pull || git clone https://github.com/nadhiroff/kit-deploiement_ftp-github.git "$K"; ls "$K"</pre></div>
+  <div class="out"><div class="lbl">Résultat attendu</div><pre>deploy-init  deploy.yml  guide-deploiement.html  LISEZMOI.txt</pre></div>
+  <p>Sans Git : <a href="https://github.com/nadhiroff/kit-deploiement_ftp-github/archive/refs/heads/main.zip">télécharge le zip</a>, puis :</p>
+  <div class="cmd"><pre>cd ~/Téléchargements &amp;&amp; unzip -o kit-deploiement_ftp-github-main.zip &amp;&amp; rm -rf kit-deploiement &amp;&amp; mv kit-deploiement_ftp-github-main kit-deploiement &amp;&amp; ls kit-deploiement</pre></div>
+</div></div>
+
+<div class="step"><div class="n">5</div><div>
+  <h4>Installer la commande <code>deploy-init</code></h4>
+  <div class="cmd"><pre>mkdir -p ~/.local/bin
+cp ~/Téléchargements/kit-deploiement/deploy-init ~/.local/bin/deploy-init
+chmod +x ~/.local/bin/deploy-init
+grep -q 'DEPLOY_CENTRAL_REPO' ~/.bashrc || echo 'export DEPLOY_CENTRAL_REPO="nadhiroff/deploy-workflows"' &gt;&gt; ~/.bashrc
+grep -q '.local/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.bashrc
+source ~/.bashrc</pre></div>
+  <p>Vérifie :</p>
+  <div class="cmd"><pre>which deploy-init &amp;&amp; echo "$DEPLOY_CENTRAL_REPO"</pre></div>
+  <div class="out"><div class="lbl">Résultat attendu</div><pre>/home/nadhir/.local/bin/deploy-init
+nadhiroff/deploy-workflows</pre></div>
+</div></div>
+
+<!-- ============================ CENTRAL ============================ -->
+<h2 id="central">2. Le dépôt central <span class="tag once">une seule fois en tout</span></h2>
+<p>Le moteur vit sur GitHub. Il n'est pas lié à un PC. Commence par vérifier s'il existe déjà :</p>
+<div class="cmd"><pre>gh repo view nadhiroff/deploy-workflows --json name -q .name 2&gt;/dev/null &amp;&amp; echo "✅ existe déjà" || echo "➜ à créer"</pre></div>
+<ul>
+  <li><b>« existe déjà »</b> : rien à créer. Passe directement à l'<a href="#central-acces">étape d'accès</a> pour vérifier le réglage.</li>
+  <li><b>« à créer »</b> : suis les étapes ci-dessous.</li>
+</ul>
+
+<h3>Créer le dépôt central</h3>
+<div class="cmd"><pre>mkdir -p ~/deploy-workflows/.github/workflows
+cp ~/Téléchargements/kit-deploiement/deploy.yml ~/deploy-workflows/.github/workflows/deploy.yml
+cd ~/deploy-workflows
+git init -b main
+git add .
+git commit -m "workflow de déploiement réutilisable"
+gh repo create deploy-workflows --private --source=. --push
+cd ~</pre></div>
+
+<h3 id="central-acces">Autoriser tes projets à l'utiliser</h3>
+<p>Sans ce réglage, chaque déploiement échoue avec <code>workflow was not found</code>. C'est l'erreur qu'on a eue sur <code>summary</code>.</p>
+<div class="cmd"><pre>gh api -X PUT repos/nadhiroff/deploy-workflows/actions/permissions/access -f access_level=user</pre></div>
+<div class="cmd"><pre>gh api repos/nadhiroff/deploy-workflows/actions/permissions/access</pre></div>
+<div class="out"><div class="lbl">Résultat attendu</div><pre>{
+  "access_level": "user"
+}</pre></div>
+<p>Équivalent dans le navigateur : dépôt <code>deploy-workflows</code> → <b>Settings → Actions → General</b> → section <b>Access</b> → <b>Accessible from repositories owned by the user</b> → <b>Save</b>.</p>
+
+<div class="box warn"><strong class="k">Règle de visibilité</strong>
+<p>Le dépôt central est <b>privé</b>. GitHub interdit à un projet <b>public</b> d'utiliser un moteur privé. Tous tes projets branchés doivent donc être <b>privés</b>, ce qui protège aussi ton code et tes fichiers.</p></div>
+
+<h3>Mettre le moteur à jour plus tard</h3>
+<p>Si on améliore <code>deploy.yml</code>, tu le remplaces une fois ici et <b>tous</b> tes projets en profitent. Ce bloc prend le <code>deploy*.yml</code> le plus récent de tes Téléchargements. Il ne copie que si le fichier contient bien la dernière correction, ce qui évite le piège du fichier ancien qu'on a rencontré.</p>
+<div class="cmd"><pre>[ -d ~/deploy-workflows ] || gh repo clone nadhiroff/deploy-workflows ~/deploy-workflows
+NOUVEAU="$(ls -t ~/Téléchargements/deploy*.yml ~/Téléchargements/kit-deploiement/deploy.yml 2&gt;/dev/null | head -1)"
+echo "Fichier utilisé : $NOUVEAU"
+if grep -q delete-candidates "$NOUVEAU"; then
+  cp "$NOUVEAU" ~/deploy-workflows/.github/workflows/deploy.yml
+  cd ~/deploy-workflows &amp;&amp; git pull -q &amp;&amp; git add . &amp;&amp; git commit -m "mise à jour du moteur de déploiement" &amp;&amp; git push
+  cd ~
+else
+  echo "❌ Ce fichier est une ancienne version"
+fi</pre></div>
+<p>Vérifier la version qui est vraiment sur GitHub :</p>
+<div class="cmd"><pre>gh api repos/nadhiroff/deploy-workflows/contents/.github/workflows/deploy.yml --jq .content | base64 -d | grep -c delete-candidates</pre></div>
+<div class="out"><div class="lbl">Résultat attendu</div><pre>4</pre></div>
+<p>Un nombre supérieur à 0 signifie que c'est la bonne version. Un <code>0</code> signifie que c'est une ancienne version.</p>
+
+<!-- ============================ CHOISIR ============================ -->
+<h2 id="choisir">Quel est ton cas ?</h2>
+<p>Choisis la situation qui correspond à ton projet. Chaque cas est complet du début à la fin.</p>
+<div class="pick">
+  <a href="#cas-a"><span class="l">A</span><b>Nouveau projet</b><span>Pas de dépôt GitHub, rien sur le serveur. Ex. <code>summary</code>.</span></a>
+  <a href="#cas-b"><span class="l">B</span><b>Dépôt GitHub déjà créé</b><span>Le dépôt existe, mais pas encore de dossier sur ton PC ni sur le serveur.</span></a>
+  <a href="#cas-c"><span class="l">C</span><b>Projet déjà en ligne</b><span>Sur GitHub, sur ton PC et sur le serveur. Ex. <code>calculateur_performance</code>.</span></a>
+  <a href="#cas-d"><span class="l">D</span><b>Seulement sur le serveur</b><span>Le site est en ligne mais tu n'as ni copie locale ni Git.</span></a>
+  <a href="#cas-e"><span class="l">E</span><b>Dossier local non relié</b><span>Le dossier est sur ton PC et le dépôt sur GitHub, mais ils ne sont pas reliés.</span></a>
+</div>
+
+<h3>Avant chaque cas : trouver le bon « dossier distant »</h3>
+<p>Ouvre FileZilla, connecte-toi et regarde où tu arrives. Sur ton hébergement arobase360, tu arrives à <code>/</code>, qui est <b>la racine de tous tes sites</b> : <code>accessbenin</code>, <code>formulaire</code>, <code>calculateur_performance</code>…</p>
+<div class="sim">
+  <div class="pane"><div class="bar">FILEZILLA · SITE DISTANT /</div><pre>/
+├── .well-known/
+├── accessbenin/
+├── calculateur_performance/
+├── formulaire/
+├── planning_RGZ/
+├── .htaccess        ← ne jamais écraser
+└── index.html</pre></div>
+  <div class="pane"><div class="bar">QUE RÉPONDRE À « DOSSIER DISTANT »</div><pre><span class="new">/nom_du_projet/</span>   ✅ un dossier par projet
+/public_html/     ❌ n'existe pas ici
+/                 ❌ écraserait la racine
+                     et tous tes sites</pre></div>
+</div>
+<p>Le dossier distant est <b>créé automatiquement</b> au premier déploiement s'il n'existe pas. Tu n'as pas besoin de le créer dans FileZilla.</p>
+
+<!-- ============================ CAS A ============================ -->
+<h2 id="cas-a">A. Nouveau projet <span class="tag">GitHub et serveur vides</span></h2>
+<p>Exemple : un dossier <code>~/projets/mon-site</code> avec des fichiers HTML et CSS, sans Git, sans dépôt GitHub, rien sur le serveur.</p>
+
+<div class="step"><div class="n">1</div><div>
+  <h4>Aller dans le dossier du projet</h4>
+  <div class="cmd"><pre>cd ~/projets/mon-site
+ls -a</pre></div>
+</div></div>
+
+<div class="step"><div class="n">2</div><div>
+  <h4>Lancer <code>deploy-init</code></h4>
+  <div class="cmd"><pre>deploy-init</pre></div>
+  <p>Exemple complet de session, avec tes réponses en clair :</p>
+  <div class="out"><div class="lbl">Simulation</div><pre>➜ Aucun dépôt Git dans /home/nadhir/projets/mon-site.
+Initialiser un dépôt Git ici ? [o/N] : o
+✅ Dépôt Git initialisé.
+Nom du dépôt GitHub à créer [mon-site] : mon-site
+Visibilité (private/public) [private] :            ← Entrée = privé
+✅ Dépôt GitHub créé : nadhiroff/mon-site
+Branche qui déclenche le déploiement [main] :      ← Entrée
+Dossier du projet à mettre en ligne (. = tout le projet) [.] :   ← Entrée
+Protocole (ftp/ftps/sftp) [ftps] : ftp
+Port [21] :                                        ← Entrée
+Hôte (ex. ftp.mondomaine.com) : srv200.arobase360.com
+Identifiant : ton-identifiant-ftp
+Mot de passe (masqué) :                            ← rien ne s'affiche, c'est normal
+Dossier distant [/public_html/] : /mon-site/
+Bloquer le déploiement en cas d'erreur de syntaxe PHP ? [o/N] : o
+✅ Secrets enregistrés.
+✅ Workflow créé : .github/workflows/deploy.yml
+✅ Fichier .deployignore créé (à compléter selon ton projet).
+➜ Ouvre maintenant .deployignore pour choisir ce qui NE doit PAS partir en ligne.
+Appuie sur Entrée quand c'est fait…</pre></div>
+</div></div>
+
+<div class="step"><div class="n">3</div><div>
+  <h4>Remplir <code>.deployignore</code> pendant que le script attend</h4>
+  <p>Ne ferme pas le premier terminal. Ouvre un <b>deuxième terminal</b> :</p>
+  <div class="cmd"><pre>cd ~/projets/mon-site &amp;&amp; nano .deployignore</pre></div>
+  <p>Ajoute une ligne par élément à exclure (voir <a href="#deployignore">Choisir ce qui part</a>). Enregistre avec <b>Ctrl+O</b> puis <b>Entrée</b>, et quitte avec <b>Ctrl+X</b>. Reviens au premier terminal et appuie sur <b>Entrée</b>.</p>
+</div></div>
+
+<div class="step"><div class="n">4</div><div>
+  <h4>Répondre <b>N</b> à « Pousser maintenant ? »</h4>
+  <p>À ce stade, seuls les fichiers de configuration sont commités. Tes pages HTML ne sont <b>pas encore</b> dans Git. C'est le piège rencontré avec <code>summary</code> : le premier push n'envoyait rien d'utile.</p>
+  <div class="out"><div class="lbl">Simulation</div><pre>✅ Commit créé.
+➜ Aucun fichier ne sera mis en ligne.
+Pousser « main » maintenant ? [o/N] : N
+➜ Plus tard : git push -u origin main</pre></div>
+</div></div>
+
+<div class="step"><div class="n">5</div><div>
+  <h4>Ajouter les fichiers du site à Git</h4>
+  <div class="cmd"><pre>git add .
+git status</pre></div>
+  <p>Lis la liste « Modifications qui seront validées ». Si un fichier privé apparaît (Excel de clients, mot de passe…), voir <a href="#prive-github">fichier privé dans Git</a>. Sinon :</p>
+  <div class="cmd"><pre>git commit -m "ajout des fichiers du site"</pre></div>
+</div></div>
+
+<div class="step"><div class="n">6</div><div>
+  <h4>Vérifier l'aperçu</h4>
+  <div class="cmd"><pre>deploy-init --apercu</pre></div>
+  <div class="out"><div class="lbl">Exemple</div><pre>➜ Dossier mis en ligne : ./   (contenu du dernier commit)
+.htaccess
+css/style.css
+index.html
+contact.html
+✅ 4 fichier(s) seront mis en ligne.</pre></div>
+  <p>Si un fichier ne devrait pas y être, ajoute-le dans <code>.deployignore</code>, puis lance <code>git add .deployignore &amp;&amp; git commit -m "filtre"</code> et refais l'aperçu.</p>
+</div></div>
+
+<div class="step"><div class="n">7</div><div>
+  <h4>Pousser et suivre</h4>
+  <div class="cmd"><pre>git push -u origin main
+gh run watch</pre></div>
+  <p>Si <code>gh run watch</code> répond <code>found no in progress runs</code>, attends 5 secondes et relance-le.</p>
+  <div class="out"><div class="lbl">Résultat attendu</div><pre>✓ deploy / deploy in 41s
+  ✓ Vérifier les paramètres
+  ✓ Récupérer le code
+  ✓ Installer les outils
+  ✓ Préparer les fichiers à mettre en ligne
+  ✓ Vérifier la syntaxe PHP
+  - Enregistrer la clé SSH du serveur      ← normal en ftp
+  ✓ Envoyer les fichiers modifiés
+✓ Run Déploiement completed with 'success'</pre></div>
+</div></div>
+
+<div class="step"><div class="n">8</div><div>
+  <h4>Contrôler sur le serveur</h4>
+  <p>Dans FileZilla, appuie sur <b>F5</b> : le dossier <code>/mon-site/</code> est apparu avec tes fichiers et un fichier <code>.deploy-state</code>. Ouvre <code>https://ton-domaine/mon-site/</code> dans le navigateur.</p>
+</div></div>
+
+<!-- ============================ CAS B ============================ -->
+<h2 id="cas-b">B. Dépôt GitHub déjà créé <span class="tag">rien sur le PC ni le serveur</span></h2>
+<p>Tu as créé le dépôt sur github.com (par exemple <code>nadhiroff/mon-site</code>), mais tu n'as pas encore de dossier sur ton PC ni de dossier dans FileZilla.</p>
+
+<div class="step"><div class="n">1</div><div>
+  <h4>Vérifier que le dépôt est privé</h4>
+  <div class="cmd"><pre>gh repo view nadhiroff/mon-site --json visibility</pre></div>
+  <p>Si le résultat est <code>"PUBLIC"</code>, passe-le en privé :</p>
+  <div class="cmd"><pre>gh repo edit nadhiroff/mon-site --visibility private</pre></div>
+</div></div>
+
+<div class="step"><div class="n">2</div><div>
+  <h4>Récupérer le dépôt sur ton PC</h4>
+  <p>« Cloner » crée le dossier local déjà relié à GitHub.</p>
+  <div class="cmd"><pre>mkdir -p ~/projets &amp;&amp; gh repo clone nadhiroff/mon-site ~/projets/mon-site &amp;&amp; cd ~/projets/mon-site</pre></div>
+  <p>Si le dépôt est vide, Git affiche <code>vous semblez avoir cloné un dépôt vide</code>. C'est normal.</p>
+</div></div>
+
+<div class="step"><div class="n">3</div><div>
+  <h4>Mettre tes fichiers HTML et CSS dans ce dossier</h4>
+  <p>Crée-les ou copie-les dans <code>~/projets/mon-site</code>, puis :</p>
+  <div class="cmd"><pre>git add .
+git status
+git commit -m "premiers fichiers du site"</pre></div>
+  <p>Si le dépôt était vide, la branche peut s'appeler <code>master</code>. Vérifie avec <code>git branch --show-current</code> et utilise ce nom à l'étape suivante.</p>
+</div></div>
+
+<div class="step"><div class="n">4</div><div>
+  <h4>Brancher le déploiement</h4>
+  <div class="cmd"><pre>deploy-init</pre></div>
+  <p>Le script détecte le dépôt existant et ne demande pas de nom. Réponds comme au <a href="#cas-a">cas A</a>. Pour le dossier distant, mets <code>/mon-site/</code> : il sera créé tout seul sur le serveur. Remplis <code>.deployignore</code> quand le script attend, vérifie l'aperçu, puis réponds <b>o</b> pour pousser.</p>
+</div></div>
+
+<div class="step"><div class="n">5</div><div>
+  <h4>Contrôler</h4>
+  <div class="cmd"><pre>gh run watch</pre></div>
+  <div class="sim">
+    <div class="pane"><div class="bar">SERVEUR AVANT</div><pre>/
+├── accessbenin/
+├── formulaire/
+└── planning_RGZ/</pre></div>
+    <div class="pane"><div class="bar">SERVEUR APRÈS (F5)</div><pre>/
+├── accessbenin/
+├── formulaire/
+├── <span class="new">mon-site/</span>
+│   ├── <span class="new">.deploy-state</span>
+│   ├── <span class="new">css/style.css</span>
+│   └── <span class="new">index.html</span>
+└── planning_RGZ/</pre></div>
+  </div>
+</div></div>
+
+<!-- ============================ CAS C ============================ -->
+<h2 id="cas-c">C. Projet déjà en ligne <span class="tag">GitHub + PC + serveur</span></h2>
+<p>Exemple réel : <code>calculateur_performance</code>, développé dans <code>/var/www/html/calculateur_performance_a_envoyer/calculateur_performance</code>, dépôt <code>nadhiroff/calculateur_performance</code>, en ligne dans <code>/calculateur_performance/</code>.</p>
+<div class="box danger"><strong class="k">Le risque dans ce cas</strong>
+<p>Le premier déploiement remplace les fichiers du serveur par ceux de Git. Si ton fichier de configuration (accès à la base de données) est dans Git, la version de ton PC <b>écrase celle du serveur</b> et le site perd sa base. C'est ce qui est arrivé avec <code>config/config.php</code>. Il faut donc exclure ces fichiers <b>avant</b> le premier push.</p></div>
+
+<div class="step"><div class="n">1</div><div>
+  <h4>Aller dans le bon dossier</h4>
+  <p>Le dossier qui contient <code>.git</code>, pas son parent.</p>
+  <div class="cmd"><pre>cd /var/www/html/calculateur_performance_a_envoyer/calculateur_performance
+git rev-parse --show-toplevel
+git remote -v
+git branch --show-current
+gh repo view --json visibility</pre></div>
+  <div class="out"><div class="lbl">Résultat attendu</div><pre>/var/www/html/calculateur_performance_a_envoyer/calculateur_performance
+origin  https://github.com/nadhiroff/calculateur_performance.git (fetch)
+origin  https://github.com/nadhiroff/calculateur_performance.git (push)
+main
+{"visibility":"PRIVATE"}</pre></div>
+</div></div>
+
+<div class="step"><div class="n">2</div><div>
+  <h4>Sauvegarder le site en ligne</h4>
+  <p>Dans FileZilla, clic droit sur le dossier du projet → <b>Télécharger</b>, vers par exemple <code>~/sauvegardes/</code>. Si quelque chose casse, tu remets ces fichiers.</p>
+</div></div>
+
+<div class="step"><div class="n">3</div><div>
+  <h4>Repérer les fichiers propres au serveur</h4>
+  <div class="cmd"><pre>git ls-files config storage uploads database</pre></div>
+  <div class="out"><div class="lbl">Exemple réel</div><pre>config/.htaccess
+config/config.php        ← accès BDD : à exclure
+storage/.htaccess</pre></div>
+  <p>Exclus tout ce qui contient des identifiants, et tout ce que le site crée lui-même en ligne (fichiers envoyés par les utilisateurs, logs, cache).</p>
+</div></div>
+
+<div class="step"><div class="n">4</div><div>
+  <h4>Brancher avec <code>deploy-init</code></h4>
+  <div class="cmd"><pre>deploy-init</pre></div>
+  <p>Réponds <code>ftp</code>, <code>21</code>, <code>srv200.arobase360.com</code>, ton identifiant, ton mot de passe, puis le dossier distant <code>/calculateur_performance/</code>. Quand le script attend, ouvre <code>.deployignore</code> dans un deuxième terminal et ajoute par exemple :</p>
+  <div class="cmd file"><pre>/config/
+/document_test/
+/tests/
+/database/
+/composer.json
+/composer.lock
+/.gitignore
+/.gitattributes</pre></div>
+  <p>Vérifie l'aperçu affiché : aucune ligne ne doit commencer par <code>config/</code>, <code>document_test/</code> ou <code>tests/</code>. <code>calculateur/config/</code> peut rester : ce sont des valeurs par défaut de l'application, sans mot de passe.</p>
+</div></div>
+
+<div class="step"><div class="n">5</div><div>
+  <h4>Pousser et contrôler la liste envoyée</h4>
+  <div class="cmd"><pre>gh run watch</pre></div>
+  <div class="cmd"><pre>gh run view --web</pre></div>
+  <p>La page GitHub affiche en bas la liste exacte des fichiers <b>envoyés</b> et <b>supprimés</b>. Ensuite, ouvre le site et teste une page qui utilise la base.</p>
+</div></div>
+
+<div class="step"><div class="n">6</div><div>
+  <h4>Nettoyer ce qui était parti avant l'exclusion</h4>
+  <p>Si des fichiers privés avaient été envoyés <b>avant</b> que tu les exclues, ils restent sur le serveur, car un fichier exclu n'est jamais supprimé. Supprime-les à la main dans FileZilla (par exemple <code>document_test</code> et <code>tests</code>). Ne touche pas à <code>config</code>.</p>
+</div></div>
+
+<!-- ============================ CAS D ============================ -->
+<h2 id="cas-d">D. Projet seulement sur le serveur <span class="tag">ni Git ni copie locale</span></h2>
+<p>Le site tourne en ligne, mais tu n'as rien sur ton PC.</p>
+<div class="step"><div class="n">1</div><div>
+  <h4>Télécharger le site</h4>
+  <p>Dans FileZilla, côté gauche, va dans <code>~/projets/</code>. Côté droit, clic droit sur le dossier du site → <b>Télécharger</b>. Tu obtiens par exemple <code>~/projets/planning_RGZ</code>. Garde aussi une copie de sauvegarde à part.</p>
+</div></div>
+<div class="step"><div class="n">2</div><div>
+  <h4>Garder les identifiants hors de Git</h4>
+  <p>Les fichiers téléchargés contiennent les <b>vrais identifiants de production</b>. Ils ne doivent pas aller sur GitHub. Ajoute-les dans <code>.gitignore</code> <b>avant</b> le premier commit : ils ne seront ni sur GitHub, ni envoyés, ni touchés sur le serveur.</p>
+  <div class="cmd"><pre>cd ~/projets/planning_RGZ &amp;&amp; nano .gitignore</pre></div>
+  <div class="cmd file"><pre>.env
+.env.*
+config/config.php
+uploads/
+logs/</pre></div>
+  <p>Adapte la liste aux vrais noms de fichiers du projet.</p>
+</div></div>
+<div class="step"><div class="n">3</div><div>
+  <h4>Suivre le cas A</h4>
+  <p>Continue avec le <a href="#cas-a">cas A</a>, à partir de l'étape 2. Pour le dossier distant, mets le dossier existant, par exemple <code>/planning_RGZ/</code>. Au premier déploiement, les fichiers identiques sont renvoyés, ce qui est sans conséquence.</p>
+</div></div>
+
+<!-- ============================ CAS E ============================ -->
+<h2 id="cas-e">E. Dossier local non relié au dépôt GitHub</h2>
+<p>Ton dossier existe sur le PC (sans <code>.git</code>) et un dépôt du même projet existe déjà sur GitHub. On récupère l'historique GitHub et on le pose dans ton dossier, sans toucher à tes fichiers.</p>
+<div class="cmd"><pre>cd ~/projets/mon-site
+gh repo clone nadhiroff/mon-site /tmp/relier-depot
+mv /tmp/relier-depot/.git .
+rm -rf /tmp/relier-depot
+git status</pre></div>
+<p><code>git status</code> montre alors les différences entre ton dossier et GitHub. Commite ce qui doit l'être (<code>git add .</code> puis <code>git commit -m "..."</code>), puis lance <code>deploy-init</code> comme au <a href="#cas-b">cas B</a>, étape 4.</p>
+<div class="box warn"><strong class="k">Attention</strong><p>Si ton dossier contient déjà un <code>.git</code>, ne fais pas ceci. Vérifie plutôt avec <code>git remote -v</code> s'il est relié au bon dépôt.</p></div>
+
+<!-- ============================ QUOTIDIEN ============================ -->
+<h2 id="quotidien">Travailler chaque jour</h2>
+<p>Une fois un projet branché, tu n'as plus que trois commandes, toujours lancées <b>dans le dossier du projet</b> :</p>
+<div class="cmd"><pre>git add .
+git commit -m "ce que tu as changé"
+git push</pre></div>
+<p>Pour suivre la mise en ligne, si tu veux :</p>
+<div class="cmd"><pre>gh run watch</pre></div>
+<div class="out"><div class="lbl">Exemple : tu as modifié une page</div><pre>À envoyer : 1 fichier(s) — À supprimer : 0 fichier(s)
+✅ Déploiement terminé.</pre></div>
+
+<h3>Autres gestes utiles</h3>
+<div class="tbl"><table>
+<thead><tr><th>Je veux…</th><th>Commande</th></tr></thead>
+<tbody>
+<tr><td>Relancer un déploiement sans rien changer</td><td><code>gh workflow run deploy.yml</code></td></tr>
+<tr><td>Pousser sans mettre en ligne (travail en cours)</td><td><code>git switch -c dev</code> puis <code>git push -u origin dev</code>. Seule <code>main</code> déploie</td></tr>
+<tr><td>Mettre en ligne le travail de <code>dev</code></td><td><code>git switch main &amp;&amp; git merge dev &amp;&amp; git push</code></td></tr>
+<tr><td>Annuler le dernier commit et remettre l'ancienne version en ligne</td><td><code>git revert HEAD</code> puis <code>git push</code></td></tr>
+<tr><td>Couper les déploiements automatiques</td><td><code>gh workflow disable deploy.yml</code></td></tr>
+<tr><td>Les réactiver</td><td><code>gh workflow enable deploy.yml</code></td></tr>
+</tbody></table></div>
+
+<!-- ============================ FICHIERS ============================ -->
+<h2 id="fichiers">Nouveaux, modifiés, supprimés, anciens fichiers</h2>
+<p>Ce que fait le serveur pour chaque situation, après <code>git add .</code>, <code>git commit</code> et <code>git push</code> :</p>
+<div class="tbl"><table>
+<thead><tr><th>Sur ton PC</th><th>Sur le serveur</th></tr></thead>
+<tbody>
+<tr><td>Tu crées un fichier ou un dossier</td><td>Envoyé. Les dossiers sont créés si besoin</td></tr>
+<tr><td>Tu modifies un fichier</td><td>Remplacé</td></tr>
+<tr><td>Tu ne touches pas un fichier</td><td>Rien, il n'est pas renvoyé</td></tr>
+<tr><td>Tu supprimes un fichier</td><td>Supprimé</td></tr>
+<tr><td>Tu renommes ou déplaces un fichier</td><td>Le nouveau est envoyé, l'ancien supprimé</td></tr>
+<tr><td>Tu ajoutes un fichier existant dans <code>.deployignore</code></td><td><b>Conservé tel quel</b>, plus jamais touché. Supprime-le à la main si tu n'en veux plus</td></tr>
+<tr><td>Tu retires une ligne de <code>.deployignore</code></td><td>Les fichiers concernés sont envoyés au push suivant</td></tr>
+<tr><td>Un fichier existe seulement sur le serveur (uploads, logs, ancien fichier jamais mis dans Git)</td><td>Jamais touché</td></tr>
+<tr><td>Tu modifies un fichier sans le commiter</td><td>Rien : seuls les commits poussés partent</td></tr>
+</tbody></table></div>
+
+<p>Exemple de commit mixte, et ce que montre le résumé GitHub :</p>
+<div class="sim">
+  <div class="pane"><div class="bar">SUR TON PC</div><pre>git status
+  modifié :   index.html
+  nouveau :   css/print.css
+  supprimé :  ancien.html
+  renommé :   a.php -&gt; b.php</pre></div>
+  <div class="pane"><div class="bar">RÉSUMÉ DU DÉPLOIEMENT</div><pre>Déploiement : 3 envoyé(s), 2 supprimé(s)
+Envoyés
+  <span class="new">./index.html</span>
+  <span class="new">./css/print.css</span>
+  <span class="new">./b.php</span>
+Supprimés
+  <span class="gone">./ancien.html</span>
+  <span class="gone">./a.php</span></pre></div>
+</div>
+<div class="box"><p><code>git add .</code> prend en compte les nouveaux fichiers, les modifications <b>et</b> les suppressions. Pense à vérifier avec <code>git status</code> avant de commiter.</p></div>
+
+<!-- ============================ DEPLOYIGNORE ============================ -->
+<h2 id="deployignore">Choisir ce qui part en ligne</h2>
+<p><code>.deployignore</code> est à la racine du projet. Comme son nom commence par un point, il est <b>caché</b> : utilise <code>ls -a</code> dans le terminal, ou <b>Ctrl+H</b> dans le gestionnaire de fichiers.</p>
+<div class="cmd"><pre>nano .deployignore</pre></div>
+<p>Dans nano : <b>Ctrl+O</b> puis <b>Entrée</b> pour enregistrer, <b>Ctrl+X</b> pour quitter. Ensuite, commite le fichier, sinon le changement n'est pas pris en compte :</p>
+<div class="cmd"><pre>git add .deployignore &amp;&amp; git commit -m "mise à jour du filtre de déploiement" &amp;&amp; deploy-init --apercu</pre></div>
+
+<h3>La syntaxe</h3>
+<div class="tbl"><table>
+<thead><tr><th>Ligne</th><th>Exclut</th></tr></thead>
+<tbody>
+<tr><td><code>/BISON.xlsx</code></td><td>Ce fichier précis, à la racine</td></tr>
+<tr><td><code>/docs/</code></td><td>Le dossier <code>docs</code> à la racine et tout son contenu</td></tr>
+<tr><td><code>tests/</code></td><td>Tout dossier nommé <code>tests</code>, où qu'il soit</td></tr>
+<tr><td><code>*.xlsx</code></td><td>Tous les fichiers Excel, partout</td></tr>
+<tr><td><code>/aa/installer.bat</code></td><td>Ce fichier dans le dossier <code>aa</code></td></tr>
+<tr><td><code># commentaire</code></td><td>Rien, c'est une note pour toi</td></tr>
+</tbody></table></div>
+<p>Le <code>/</code> au début veut dire « à partir de la racine du projet ». Sans lui, le motif s'applique partout.</p>
+
+<h3>Ce qu'on exclut habituellement</h3>
+<div class="cmd file"><pre># Identifiants et réglages du serveur
+/config/
+# Fichiers de travail
+/document_test/
+/tests/
+/database/
+*.md
+*.xlsx
+# Outils de développement
+/composer.json
+/composer.lock
+/package.json
+/package-lock.json
+/.gitignore
+/.gitattributes</pre></div>
+
+<div class="box warn"><strong class="k">.deployignore ou .gitignore ?</strong>
+<p><b><code>.deployignore</code></b> : le fichier reste sur GitHub mais ne va pas en ligne. C'est le cas pour la documentation, les tests et les fichiers de travail.</p>
+<p id="prive-github"><b><code>.gitignore</code></b> : le fichier ne va <b>nulle part</b>, ni sur GitHub ni en ligne. C'est le cas pour les mots de passe, <code>.env</code> et les données personnelles de clients. Si un tel fichier est déjà commité, retire-le de Git sans l'effacer de ton PC :</p>
+<div class="cmd"><pre>echo "/BISON.xlsx" &gt;&gt; .gitignore
+git rm --cached BISON.xlsx
+git commit -m "retrait d'un fichier privé du dépôt"
+git push</pre></div>
+<p>Le fichier reste dans l'historique Git. C'est sans gravité si le dépôt est privé.</p></div>
+
+<!-- ============================ VERIFIER ============================ -->
+<h2 id="verifier">Vérifier qu'un déploiement a marché</h2>
+<div class="step"><div class="n">1</div><div>
+  <h4>La liste des derniers déploiements</h4>
+  <div class="cmd"><pre>gh run list --limit 5</pre></div>
+  <div class="out"><div class="lbl">Exemple</div><pre>STATUS  TITLE                         WORKFLOW     BRANCH  EVENT
+✓       exclusion du dossier config   Déploiement  main    push
+✓       Déploiement                   Déploiement  main    workflow_dispatch
+X       ci: configuration du dépl…    Déploiement  main    push</pre></div>
+  <p><code>✓</code> veut dire réussi, <code>X</code> échoué. Un ancien <code>X</code> déjà corrigé peut être ignoré.</p>
+</div></div>
+<div class="step"><div class="n">2</div><div>
+  <h4>L'erreur d'un déploiement raté</h4>
+  <div class="cmd"><pre>gh run view --log-failed</pre></div>
+  <p>Un menu s'ouvre : choisis la ligne avec <code>X</code> et appuie sur Entrée. Pour sortir sans choisir : <b>Ctrl+C</b>.</p>
+</div></div>
+<div class="step"><div class="n">3</div><div>
+  <h4>La liste des fichiers envoyés</h4>
+  <div class="cmd"><pre>gh run view --web</pre></div>
+  <div class="sim"><div class="pane"><div class="bar">GITHUB · ACTIONS · RÉSUMÉ</div><pre>Déploiement : 2 envoyé(s), 0 supprimé(s)
+Envoyés
+  ./index.php
+  ./src/Controllers/FactureController.php</pre></div></div>
+</div></div>
+<div class="step"><div class="n">4</div><div>
+  <h4>Sur le serveur et dans le navigateur</h4>
+  <p>FileZilla → <b>F5</b> : les fichiers modifiés ont l'heure du déploiement. Ouvre le site et recharge avec <b>Ctrl+Maj+R</b> pour ignorer le cache.</p>
+</div></div>
+
+<h3>Protéger le fichier <code>.deploy-state</code></h3>
+<p>Le moteur dépose dans chaque dossier distant un fichier <code>.deploy-state</code>, qui contient la liste de tes fichiers. Pour qu'il ne soit pas lisible depuis le navigateur, ajoute ceci au <code>.htaccess</code> du projet, puis commite et pousse :</p>
+<div class="cmd file"><pre>&lt;Files ".deploy-state"&gt;
+  Require all denied
+&lt;/Files&gt;</pre></div>
+<p>Ne supprime pas <code>.deploy-state</code> du serveur. Sans lui, le déploiement suivant renvoie tous les fichiers. Ce n'est pas grave, juste plus long.</p>
+
+<!-- ============================ SECRETS ============================ -->
+<h2 id="secrets">Identifiants FTP et réglages</h2>
+<p>Ils sont dans les secrets du projet : sur GitHub, ouvre le projet → <b>Settings → Secrets and variables → Actions</b>. On ne peut plus lire leur valeur, seulement la remplacer.</p>
+<div class="tbl"><table>
+<thead><tr><th>Secret</th><th>Contenu</th><th>Exemple</th></tr></thead>
+<tbody>
+<tr><td><code>FTP_SERVER</code></td><td>Hôte</td><td><code>srv200.arobase360.com</code></td></tr>
+<tr><td><code>FTP_USERNAME</code></td><td>Identifiant</td><td>ton identifiant FTP</td></tr>
+<tr><td><code>FTP_PASSWORD</code></td><td>Mot de passe</td><td>jamais écrit nulle part</td></tr>
+<tr><td><code>FTP_SERVER_DIR</code></td><td>Dossier distant</td><td><code>/calculateur_performance/</code></td></tr>
+</tbody></table></div>
+<p>Toutes ces commandes se lancent dans le dossier du projet :</p>
+<div class="cmd"><pre>gh secret list</pre></div>
+<div class="cmd"><pre>gh secret set FTP_PASSWORD</pre></div>
+<p>La commande te demande la nouvelle valeur ; colle-la puis Entrée.</p>
+<div class="cmd"><pre>gh secret set FTP_SERVER_DIR --body "/nom_du_projet/"</pre></div>
+
+<h3>Changer la branche, le protocole ou le dossier source</h3>
+<p>Ces réglages sont dans <code>.github/workflows/deploy.yml</code> du projet :</p>
+<div class="cmd file"><pre>name: Déploiement
+
+on:
+  push:
+    branches: ["main"]        # branche qui met en ligne
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: nadhiroff/deploy-workflows/.github/workflows/deploy.yml@main
+    with:
+      protocol: ftp           # ftp, ftps ou sftp
+      port: 21
+      source-dir: "."         # "." = tout le projet, ou "api" par exemple
+      php-lint: true          # bloque si erreur de syntaxe PHP
+    secrets: inherit</pre></div>
+<p>Modifie avec <code>nano .github/workflows/deploy.yml</code>, puis commite et pousse. Tu peux aussi relancer <code>deploy-init</code> : il demande confirmation avant d'écraser le workflow, redemande les identifiants, et garde ton <code>.deployignore</code> s'il existe.</p>
+
+<!-- ============================ NOUVEAU PC ============================ -->
+<h2 id="nouveau-pc">Changer de PC</h2>
+<p>Rien n'est perdu : le moteur et tous tes projets sont sur GitHub, et les identifiants FTP sont dans les secrets GitHub.</p>
+<ol class="steps">
+  <li>Refais la partie <a href="#installation">Installer sur un PC</a> avec le kit récupéré sur GitHub.</li>
+  <li>Le dépôt central existe déjà : vérifie seulement l'<a href="#central-acces">accès</a>.</li>
+  <li>Récupère chaque projet :</li>
+</ol>
+<div class="cmd"><pre>gh repo list nadhiroff --limit 50</pre></div>
+<div class="cmd"><pre>mkdir -p ~/projets &amp;&amp; gh repo clone nadhiroff/calculateur_performance ~/projets/calculateur_performance</pre></div>
+<p>C'est tout. Les projets déjà branchés <b>n'ont pas besoin</b> de <code>deploy-init</code> : leur workflow et leurs secrets sont sur GitHub. Le prochain <code>git push</code> déploie normalement.</p>
+<div class="box"><p>Les fichiers que tu as mis dans <code>.gitignore</code> (<code>.env</code>, configuration locale) ne sont pas sur GitHub. Recrée-les à la main sur le nouveau PC.</p></div>
+
+<!-- ============================ PROBLEMES ============================ -->
+<h2 id="problemes">Problèmes rencontrés et solutions</h2>
+<p>Tous ces cas sont arrivés pendant la mise en place.</p>
+
+<div class="problem"><h4>workflow was not found … access-to-reusable-workflows</h4>
+<p><b>Cause :</b> le projet n'a pas le droit d'utiliser le moteur central, soit parce que le réglage d'accès manque, soit parce que le projet est public.</p>
+<p><b>Solution :</b> refais l'<a href="#central-acces">étape d'accès</a> et passe le projet en privé avec <code>gh repo edit nadhiroff/PROJET --visibility private</code>. Relance ensuite avec <code>gh workflow run deploy.yml</code>.</p></div>
+
+<div class="problem"><h4>unknown flag: --accept-visibility-change-consequences</h4>
+<p><b>Cause :</b> ta version de <code>gh</code> est plus ancienne et ne connaît pas cette option.</p>
+<p><b>Solution :</b> lance la commande sans elle : <code>gh repo edit nadhiroff/PROJET --visibility private</code>.</p></div>
+
+<div class="problem"><h4>fatal: ni ceci ni aucun de ses répertoires parents n'est un dépôt git</h4>
+<p><b>Cause :</b> tu es dans le mauvais dossier, souvent le dossier parent du projet.</p>
+<p><b>Solution :</b> va dans le dossier qui contient <code>.git</code> (vérifie avec <code>ls -a</code>). Pour le calculateur : <code>cd /var/www/html/calculateur_performance_a_envoyer/calculateur_performance</code>.</p></div>
+
+<div class="problem"><h4>rien à valider, la copie de travail est propre (en mettant à jour le moteur)</h4>
+<p><b>Cause :</b> le fichier copié était l'ancienne version. Le nouveau n'avait pas été téléchargé, ou il portait un autre nom, comme <code>deploy(1).yml</code>.</p>
+<p><b>Solution :</b> utilise le bloc de <a href="#central">mise à jour du moteur</a>, qui vérifie la version avant de copier.</p></div>
+
+<div class="problem"><h4>cp: impossible d'évaluer '…/NOM_DU_FICHIER.yml'</h4>
+<p><b>Cause :</b> un nom d'exemple a été copié tel quel au lieu du vrai nom de fichier.</p>
+<p><b>Solution :</b> regarde le vrai nom avec <code>ls -lt ~/Téléchargements/deploy*</code>.</p></div>
+
+<div class="problem"><h4>Je ne trouve pas .deployignore</h4>
+<p><b>Cause :</b> les fichiers qui commencent par un point sont cachés.</p>
+<p><b>Solution :</b> <code>ls -a</code> dans le terminal, <b>Ctrl+H</b> dans le gestionnaire de fichiers, ou ouvre-le directement avec <code>nano .deployignore</code>.</p></div>
+
+<div class="problem"><h4>Le déploiement réussit mais le site n'apparaît pas dans FileZilla</h4>
+<p><b>Cause 1 :</b> le dossier distant était <code>/public_html/</code>, alors que sur ton hébergement la racine est <code>/</code>. Les fichiers sont partis dans un dossier <code>public_html</code> qui n'est pas servi.<br>
+<b>Solution :</b> <code>gh secret set FTP_SERVER_DIR --body "/nom_du_projet/"</code> puis <code>gh workflow run deploy.yml</code>.</p>
+<p><b>Cause 2 :</b> les fichiers du site n'avaient jamais été commités. Seuls les fichiers de configuration étaient dans Git.<br>
+<b>Solution :</b> <code>git add .</code>, <code>git commit</code>, <code>git push</code>.</p>
+<p><b>Cause 3 :</b> FileZilla n'est pas actualisé. Appuie sur <b>F5</b>.</p></div>
+
+<div class="problem"><h4>Le site ne se connecte plus à la base après le premier déploiement</h4>
+<p><b>Cause :</b> le fichier de configuration local (par exemple <code>config/config.php</code>) était dans Git et a remplacé celui du serveur.</p>
+<p><b>Solution :</b> remets le fichier depuis ta sauvegarde, ou corrige-le dans FileZilla (clic droit → <b>Afficher/Éditer</b>). Ajoute ensuite <code>/config/</code> dans <code>.deployignore</code> : il ne sera plus jamais touché, pas même supprimé.</p></div>
+
+<div class="problem"><h4>Des fichiers privés sont partis en ligne (factures, Excel, tests)</h4>
+<p><b>Solution :</b> ajoute-les dans <code>.deployignore</code>, commite, pousse, puis supprime-les à la main dans FileZilla. Le moteur ne supprime jamais un fichier exclu.</p></div>
+
+<div class="problem"><h4>Un dépôt était public avec des fichiers privés dedans</h4>
+<p><b>Solution :</b> <code>gh repo edit nadhiroff/PROJET --visibility private</code> immédiatement, puis vérifie avec <code>gh repo view nadhiroff/PROJET --json visibility</code>. Si les fichiers sont sensibles, considère qu'ils ont pu être copiés pendant qu'ils étaient publics.</p></div>
+
+<div class="problem"><h4>.deployignore a perdu mes lignes</h4>
+<p><b>Cause :</b> le projet a été réinitialisé (suppression de <code>.git</code> puis nouveau <code>deploy-init</code>), et un <code>.deployignore</code> neuf a été créé.</p>
+<p><b>Solution :</b> rajoute les lignes, commite, puis vérifie avec <code>deploy-init --apercu</code>.</p></div>
+
+<div class="problem"><h4>found no in progress runs to watch</h4>
+<p><b>Cause :</b> le déploiement n'a pas encore démarré, ou il a échoué tout de suite.</p>
+<p><b>Solution :</b> attends 5 secondes et relance <code>gh run watch</code>. Sinon, regarde <code>gh run list</code> : un <code>X</code> en 0 s signifie le plus souvent un problème d'accès au moteur (voir le premier problème).</p></div>
+
+<div class="problem"><h4>Erreur SSL / TLS pendant l'envoi</h4>
+<p><b>Cause :</b> l'hébergeur ne gère pas FTPS.</p>
+<p><b>Solution :</b> dans <code>.github/workflows/deploy.yml</code>, remplace <code>protocol: ftps</code> par <code>protocol: ftp</code>, puis commite et pousse.</p></div>
+
+<div class="problem"><h4>Login incorrect / 530</h4>
+<p><b>Solution :</b> l'identifiant ou le mot de passe est faux. Teste-les dans FileZilla, puis remplace-les avec <code>gh secret set FTP_USERNAME</code> et <code>gh secret set FTP_PASSWORD</code>.</p></div>
+
+<div class="problem"><h4>Vérifier la syntaxe PHP en rouge</h4>
+<p><b>Cause :</b> un fichier PHP contient une erreur. C'est voulu : rien n'est envoyé, le site en ligne reste intact.</p>
+<p><b>Solution :</b> <code>gh run view --log-failed</code> affiche le fichier et la ligne. Corrige, commite, pousse.</p></div>
+
+<div class="problem"><h4>Avertissements jaunes « Node.js 20 is deprecated » ou « Ubuntu 26 »</h4>
+<p>Ce sont des informations de GitHub, pas des erreurs. Le déploiement fonctionne.</p></div>
+
+<div class="problem"><h4>Un menu apparaît après gh run view et je suis bloqué</h4>
+<p>Choisis une ligne avec les flèches et Entrée, ou quitte avec <b>Ctrl+C</b>.</p></div>
+
+<!-- ============================ ALTERNATIVES ============================ -->
+<h2 id="alternatives">Autres méthodes possibles</h2>
+<p>La méthode de ce guide (GitHub Actions) est la plus proche de Vercel. D'autres façons existent :</p>
+<div class="tbl"><table>
+<thead><tr><th>Méthode</th><th>Principe</th><th>Pour toi</th></tr></thead>
+<tbody>
+<tr><td><b>GitHub Actions</b> (ce guide)</td><td>GitHub déploie à chaque push</td><td>✅ Marche de partout, historique de chaque déploiement</td></tr>
+<tr><td>FileZilla à la main</td><td>Glisser-déposer les fichiers</td><td>Pratique pour un dépannage, mais pas automatique et facile d'oublier un fichier</td></tr>
+<tr><td>Hook Git local + <code>git-ftp</code></td><td>Un script sur ton PC envoie au moment du push</td><td>Fonctionne seulement depuis ce PC</td></tr>
+<tr><td>GitLab CI</td><td>Comme GitHub Actions, sur GitLab</td><td>Seulement si tu passes sur GitLab</td></tr>
+<tr><td><code>rsync</code> via SSH</td><td>Synchronisation très rapide</td><td>Seulement si l'hébergeur donne un accès SSH</td></tr>
+<tr><td><code>git pull</code> sur le serveur</td><td>Le serveur récupère le code lui-même</td><td>Impossible sur un hébergement mutualisé sans SSH</td></tr>
+<tr><td>Surveillance de dossier (<code>inotifywait</code>)</td><td>Envoi à chaque enregistrement</td><td>Déconseillé : des fichiers à moitié finis partent en production</td></tr>
+</tbody></table></div>
+
+<!-- ============================ MEMO ============================ -->
+<h2 id="memo">Aide-mémoire</h2>
+<div class="tbl"><table>
+<thead><tr><th>Action</th><th>Commande</th></tr></thead>
+<tbody>
+<tr><td>Brancher un projet</td><td><code>deploy-init</code></td></tr>
+<tr><td>Voir ce qui partira en ligne</td><td><code>deploy-init --apercu</code></td></tr>
+<tr><td>Mettre en ligne</td><td><code>git add . &amp;&amp; git commit -m "…" &amp;&amp; git push</code></td></tr>
+<tr><td>Suivre le déploiement</td><td><code>gh run watch</code></td></tr>
+<tr><td>Liste des déploiements</td><td><code>gh run list --limit 5</code></td></tr>
+<tr><td>Voir l'erreur</td><td><code>gh run view --log-failed</code></td></tr>
+<tr><td>Voir les fichiers envoyés</td><td><code>gh run view --web</code></td></tr>
+<tr><td>Relancer sans commit</td><td><code>gh workflow run deploy.yml</code></td></tr>
+<tr><td>Changer le mot de passe FTP</td><td><code>gh secret set FTP_PASSWORD</code></td></tr>
+<tr><td>Changer le dossier distant</td><td><code>gh secret set FTP_SERVER_DIR --body "/projet/"</code></td></tr>
+<tr><td>Passer un dépôt en privé</td><td><code>gh repo edit nadhiroff/PROJET --visibility private</code></td></tr>
+<tr><td>Modifier le filtre</td><td><code>nano .deployignore</code></td></tr>
+<tr><td>Voir les fichiers cachés</td><td><code>ls -a</code></td></tr>
+</tbody></table></div>
+
+<footer>
+  <span>Guide du kit de déploiement · mis à jour le 9 novembre 2026 · Moteur : <code>nadhiroff/deploy-workflows</code></span>
+  <a class="gh-link" href="https://github.com/nadhiroff/kit-deploiement_ftp-github" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#gh"/></svg>nadhiroff/kit-deploiement_ftp-github</a>
+</footer>
+</main>
+</div>
+
+<script>
+(function(){
+  // Tableaux : chaque cellule reçoit le titre de sa colonne (affiché en fiche sur téléphone)
+  document.querySelectorAll('.tbl table').forEach(function(t){
+    var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function(th){ return th.textContent.trim(); });
+    t.querySelectorAll('tbody tr').forEach(function(tr){
+      Array.prototype.forEach.call(tr.children, function(td, i){ if (heads[i]) td.setAttribute('data-label', heads[i]); });
+    });
+  });
+
+  var ICON_COPY = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="6.5" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13.5 4.5V4a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 4v7A1.5 1.5 0 0 0 5 12.5h.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var ICON_OK = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5 8.5 14.5 15.5 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  document.querySelectorAll('.cmd').forEach(function(box){
+    var pre = box.querySelector('pre');
+    var head = document.createElement('div'); head.className = 'cmd-head';
+    var kind = document.createElement('span'); kind.className = 'cmd-kind';
+    kind.textContent = box.classList.contains('file') ? 'Contenu du fichier' : 'Terminal';
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'copy';
+    function label(icon, txt){ btn.innerHTML = icon + '<span>' + txt + '</span>'; }
+    label(ICON_COPY, 'Copier');
+    btn.setAttribute('aria-label', box.classList.contains('file') ? 'Copier le contenu' : 'Copier la commande');
+    head.appendChild(kind); head.appendChild(btn);
+    box.insertBefore(head, pre);
+    btn.addEventListener('click', function(){
+      var text = pre.textContent;
+      function done(){ label(ICON_OK, 'Copié'); btn.classList.add('done');
+        setTimeout(function(){ label(ICON_COPY, 'Copier'); btn.classList.remove('done'); }, 1600); }
+      function fallback(){
+        try{ var r = document.createRange(); r.selectNodeContents(pre);
+          var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+          var ok = document.execCommand && document.execCommand('copy');
+          if (ok) { done(); } else { label(ICON_COPY, 'Sélectionné : Ctrl+C'); }
+        }catch(e){ label(ICON_COPY, 'Sélectionne et Ctrl+C'); }
+      }
+      try{
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(text).then(done, fallback);
+        } else { fallback(); }
+      }catch(e){ fallback(); }
+    });
+  });
+})();
+
+/* Sommaire : section en cours allumée, fil d'Ariane, progression, tiroir sur téléphone */
+(function(){
+  var nav = document.getElementById('toc');
+  var topbar = document.querySelector('.topbar');
+  var bar = document.getElementById('progress');
+  var crumbGrp = document.getElementById('crumb-grp');
+  var crumbSep = document.getElementById('crumb-sep');
+  var crumbCur = document.getElementById('crumb-cur');
+  var menuBtn = document.getElementById('menu-btn');
+  var closeBtn = document.getElementById('toc-close');
+  var scrim = document.getElementById('scrim');
+
+  var items = [];
+  nav.querySelectorAll('a[href^="#"]').forEach(function(a){
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    var grp = null, li = a.parentElement.previousElementSibling;
+    while (li) { if (li.classList.contains('grp')) { grp = li; break; } li = li.previousElementSibling; }
+    items.push({a:a, el:el, grp:grp});
+  });
+  items.sort(function(x, y){ return x.el.compareDocumentPosition(y.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1; });
+
+  var current = null;
+  function setActive(it){
+    if (it === current) return;
+    if (current) { current.a.removeAttribute('aria-current'); if (current.grp) current.grp.classList.remove('on'); }
+    current = it;
+    if (!it) { crumbGrp.textContent = ''; crumbSep.hidden = true; crumbCur.textContent = 'Introduction'; return; }
+    it.a.setAttribute('aria-current', 'true');
+    if (it.grp) it.grp.classList.add('on');
+    crumbGrp.textContent = it.grp ? it.grp.textContent : '';
+    crumbSep.hidden = !it.grp;
+    crumbCur.textContent = it.a.textContent;
+    // garder le lien allumé visible dans le sommaire, sans faire défiler la page
+    var nr = nav.getBoundingClientRect(), ar = it.a.getBoundingClientRect();
+    if (ar.top < nr.top + 40) nav.scrollTop -= (nr.top + 40 - ar.top);
+    else if (ar.bottom > nr.bottom - 40) nav.scrollTop += (ar.bottom - nr.bottom + 40);
+  }
+
+  function update(){
+    var line = topbar.getBoundingClientRect().bottom + 32;
+    var found = null;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].el.getBoundingClientRect().top <= line) found = items[i]; else break;
+    }
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - window.innerHeight;
+    if (max > 0 && window.scrollY >= max - 4) found = items[items.length - 1];
+    setActive(found);
+    bar.style.width = (max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0) + '%';
+  }
+
+  var ticking = false;
+  function onScroll(){ if (!ticking) { ticking = true; requestAnimationFrame(function(){ ticking = false; update(); }); } }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', onScroll);
+  window.addEventListener('hashchange', onScroll);
+  window.addEventListener('load', update);
+  update();
+
+  // Tiroir du sommaire (téléphone)
+  function openNav(){ document.body.classList.add('nav-open'); scrim.hidden = false; menuBtn.setAttribute('aria-expanded','true');
+    var first = nav.querySelector('a[aria-current="true"]') || nav.querySelector('a'); if (first) first.focus({preventScroll:true}); }
+  function closeNav(focusBtn){ if (!document.body.classList.contains('nav-open')) return;
+    document.body.classList.remove('nav-open'); scrim.hidden = true; menuBtn.setAttribute('aria-expanded','false');
+    if (focusBtn) menuBtn.focus(); }
+  menuBtn.addEventListener('click', function(){ document.body.classList.contains('nav-open') ? closeNav(true) : openNav(); });
+  closeBtn.addEventListener('click', function(){ closeNav(true); });
+  scrim.addEventListener('click', function(){ closeNav(true); });
+  nav.addEventListener('click', function(e){ if (e.target.closest('a')) closeNav(false); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeNav(true); });
+  window.matchMedia('(min-width: 901px)').addEventListener('change', function(m){ if (m.matches) closeNav(false); });
+})();
+</script>
+
+</body>
+</html>

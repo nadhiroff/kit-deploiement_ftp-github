@@ -1,0 +1,25 @@
+KIT DE DÉPLOIEMENT AUTOMATIQUE (GitHub → FTP)
+=============================================
+
+Dépôt : https://github.com/nadhiroff/kit-deploiement_ftp-github
+Télécharger : git clone https://github.com/nadhiroff/kit-deploiement_ftp-github.git ~/Téléchargements/kit-deploiement
+
+Ouvre guide-deploiement.html (double-clic) : tout y est expliqué pas à pas.
+
+Résumé rapide sur un nouveau PC :
+  1. sudo apt install -y git gh rsync unzip
+  2. gh auth login
+  3. cp deploy-init ~/.local/bin/ && chmod +x ~/.local/bin/deploy-init
+     echo 'export DEPLOY_CENTRAL_REPO="nadhiroff/deploy-workflows"' >> ~/.bashrc
+     source ~/.bashrc
+  4. Brancher un projet :    cd mon-projet && deploy-init
+  5. Au quotidien :          git add . && git commit -m "..." && git push
+
+Fichiers :
+  deploy.yml              moteur, à placer dans le dépôt GitHub deploy-workflows
+                          (.github/workflows/deploy.yml)
+  deploy-init             commande à installer dans ~/.local/bin/
+  guide-deploiement.html  le guide complet
+
+Ce kit ne contient aucun mot de passe : les identifiants FTP sont dans
+les secrets GitHub de chaque projet.

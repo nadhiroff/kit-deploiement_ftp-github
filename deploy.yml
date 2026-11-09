@@ -1,0 +1,201 @@
+# Workflow central réutilisable : déploiement FTP / FTPS / SFTP
+# Emplacement : dépôt "deploy-workflows" → .github/workflows/deploy.yml
+#
+# Ce qui est mis en ligne :
+#   - uniquement les fichiers suivis par Git,
+#   - limités au dossier "source-dir" (par défaut : tout le projet),
+#   - moins les motifs listés dans le fichier .deployignore du projet,
+#   - moins les exclusions de sécurité ci-dessous (toujours appliquées).
+#
+# Seuls les fichiers modifiés depuis le dernier déploiement sont envoyés :
+# l'état (empreintes SHA-256) est conservé sur le serveur dans ".deploy-state".
+
+name: Déploiement FTP/SFTP (réutilisable)
+
+on:
+  workflow_call:
+    inputs:
+      protocol:
+        description: "ftp, ftps ou sftp"
+        type: string
+        default: ftps
+      port:
+        description: "Port du serveur (21 pour FTP/FTPS, 22 pour SFTP)"
+        type: number
+        default: 21
+      source-dir:
+        description: "Dossier du projet à mettre en ligne (relatif à la racine, ex. 'api' ou '.')"
+        type: string
+        default: "."
+      php-lint:
+        description: "Bloquer le déploiement si un fichier PHP a une erreur de syntaxe"
+        type: boolean
+        default: false
+    secrets:
+      FTP_SERVER:
+        required: true
+      FTP_USERNAME:
+        required: true
+      FTP_PASSWORD:
+        required: true
+      FTP_SERVER_DIR:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ github.repository }}
+      cancel-in-progress: false   # jamais deux déploiements en même temps
+    env:
+      PROTOCOL: ${{ inputs.protocol }}
+      PORT: ${{ inputs.port }}
+      SOURCE_DIR: ${{ inputs.source-dir }}
+
+    steps:
+      - name: Vérifier les paramètres
+        shell: bash
+        run: |
+          case "$PROTOCOL" in
+            ftp|ftps|sftp) ;;
+            *) echo "::error::Protocole invalide : $PROTOCOL (ftp, ftps ou sftp)"; exit 1 ;;
+          esac
+          case "$SOURCE_DIR" in
+            /*|*..*) echo "::error::source-dir doit être un chemin relatif au projet, sans '..'"; exit 1 ;;
+          esac
+
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer les outils
+        shell: bash
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp rsync
+
+      - name: Préparer les fichiers à mettre en ligne
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXCL="$RUNNER_TEMP/exclude.txt"
+          # Exclusions de sécurité, toujours appliquées (même liste que dans deploy-init)
+          printf '%s\n' '/.git/' '/.github/' '.env' '.env.*' 'node_modules/' '/.deployignore' '.deploy-state' > "$EXCL"
+          if [ -f .deployignore ]; then
+            tr -d '\r' < .deployignore | grep -vE '^[[:space:]]*(#|$)' >> "$EXCL" || true
+          fi
+
+          STAGE="$RUNNER_TEMP/stage"
+          mkdir -p "$STAGE"
+          rsync -a --exclude-from="$EXCL" ./ "$STAGE/"
+
+          SITE="$STAGE/${SOURCE_DIR#./}"
+          [ -d "$SITE" ] || { echo "::error::Dossier à mettre en ligne introuvable : $SOURCE_DIR"; exit 1; }
+          echo "SITE=$SITE" >> "$GITHUB_ENV"
+          echo "Fichiers retenus : $(find "$SITE" -type f | wc -l)"
+
+      - name: Vérifier la syntaxe PHP
+        if: ${{ inputs.php-lint }}
+        shell: bash
+        run: |
+          errors=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" >/dev/null 2>&1 || { php -l "$f" || true; errors=1; }
+          done < <(find "$SITE" -name '*.php' -not -path '*/vendor/*' -print0)
+          exit $errors
+
+      - name: Enregistrer la clé SSH du serveur
+        if: ${{ inputs.protocol == 'sftp' }}
+        shell: bash
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$PORT" "$FTP_SERVER" >> ~/.ssh/known_hosts
+
+      - name: Envoyer les fichiers modifiés
+        shell: bash
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          set -euo pipefail
+          cd "$SITE"
+          T="$RUNNER_TEMP"
+
+          # Met un chemin entre guillemets pour lftp
+          q() { local s=${1//\\/\\\\}; s=${s//\"/\\\"}; printf '"%s"' "$s"; }
+
+          # 1. Empreintes des fichiers à mettre en ligne
+          find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum > "$T/new-state"
+
+          # 2. Connexion (le mot de passe passe par la variable LFTP_PASSWORD, jamais en clair)
+          case "$PROTOCOL" in
+            sftp) URL="sftp://$FTP_SERVER"; TLS="" ;;
+            ftps) URL="ftp://$FTP_SERVER";  TLS="set ftp:ssl-force true; set ftp:ssl-protect-data true" ;;
+            ftp)  URL="ftp://$FTP_SERVER";  TLS="set ftp:ssl-allow false" ;;
+          esac
+          export LFTP_PASSWORD="$FTP_PASSWORD"
+          {
+            echo "set cmd:fail-exit yes"
+            echo "set net:max-retries 3"
+            echo "set net:timeout 30"
+            if [ -n "$TLS" ]; then echo "$TLS"; fi
+            echo "open --env-password -u $(q "$FTP_USERNAME") -p $PORT $(q "$URL")"
+            echo "mkdir -p -f $(q "$FTP_SERVER_DIR")"
+            echo "cd $(q "$FTP_SERVER_DIR")"
+          } > "$T/base.lftp"
+
+          # 3. État du déploiement précédent
+          if ! { cat "$T/base.lftp"; echo "get .deploy-state -o $(q "$T/old-state")"; } > "$T/get.lftp" \
+             || ! lftp -f "$T/get.lftp" >/dev/null 2>&1; then
+            : > "$T/old-state"
+            echo "Aucun état précédent trouvé : premier déploiement complet."
+          fi
+
+          # 4. Différences (une ligne sha256sum = 64 car. d'empreinte + 2 espaces + chemin)
+          awk 'FILENAME==ARGV[1]{h[substr($0,67)]=substr($0,1,64);next}
+               {p=substr($0,67); if(h[p]!=substr($0,1,64)) print p}' "$T/old-state" "$T/new-state" > "$T/upload.txt"
+          awk 'FILENAME==ARGV[1]{n[substr($0,67)]=1;next}
+               {p=substr($0,67); if(!(p in n)) print p}' "$T/new-state" "$T/old-state" > "$T/delete-candidates.txt"
+
+          # Un fichier exclu (.deployignore ou sécurité) n'est JAMAIS supprimé du serveur :
+          # on ne supprime que ce qui a disparu de Git et n'est pas couvert par une exclusion.
+          : > "$T/delete.txt"
+          if [ -s "$T/delete-candidates.txt" ]; then
+            PREFIX="${SOURCE_DIR#./}"; PREFIX="${PREFIX%/}"
+            if [ "$PREFIX" = "." ] || [ -z "$PREFIX" ]; then PREFIX=""; else PREFIX="$PREFIX/"; fi
+            CHK="$T/delcheck"; mkdir -p "$CHK" "$T/delcheck-dest"
+            sed 's|^\./||' "$T/delete-candidates.txt" | while IFS= read -r f; do
+              mkdir -p "$CHK/$PREFIX$(dirname "$f")"; : > "$CHK/$PREFIX$f"
+            done
+            rsync -an --exclude-from="$T/exclude.txt" --out-format='%n' "$CHK/" "$T/delcheck-dest/" \
+              | grep -v '/$' | cut -c$(( ${#PREFIX} + 1 ))- | sed 's|^|./|' > "$T/delete.txt" || true
+            KEPT=$(( $(wc -l < "$T/delete-candidates.txt") - $(wc -l < "$T/delete.txt") ))
+            if [ "$KEPT" -gt 0 ]; then echo "Fichiers exclus conservés sur le serveur : $KEPT"; fi
+          fi
+
+          NUP=$(wc -l < "$T/upload.txt"); NDEL=$(wc -l < "$T/delete.txt")
+          echo "À envoyer : $NUP fichier(s) — À supprimer : $NDEL fichier(s)"
+          {
+            echo "### Déploiement : $NUP envoyé(s), $NDEL supprimé(s)"
+            if [ "$NUP" -gt 0 ];  then echo '**Envoyés**';   echo '```'; cat "$T/upload.txt"; echo '```'; fi
+            if [ "$NDEL" -gt 0 ]; then echo '**Supprimés**'; echo '```'; cat "$T/delete.txt"; echo '```'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$NUP" -eq 0 ] && [ "$NDEL" -eq 0 ]; then
+            echo "Rien à mettre en ligne."
+            exit 0
+          fi
+
+          # 5. Commandes d'envoi / suppression, puis enregistrement du nouvel état en dernier
+          {
+            cat "$T/base.lftp"
+            sed 's|^\./||' "$T/upload.txt" | while IFS= read -r f; do dirname "$f"; done | LC_ALL=C sort -u \
+              | while IFS= read -r d; do [ "$d" = . ] || echo "mkdir -p -f $(q "$d")"; done
+            sed 's|^\./||' "$T/upload.txt" | while IFS= read -r f; do echo "put $(q "$f") -o $(q "$f")"; done
+            sed 's|^\./||' "$T/delete.txt" | while IFS= read -r f; do echo "rm -f $(q "$f")"; done
+            echo "put $(q "$T/new-state") -o .deploy-state"
+          } > "$T/deploy.lftp"
+
+          lftp -f "$T/deploy.lftp"
+          echo "✅ Déploiement terminé."

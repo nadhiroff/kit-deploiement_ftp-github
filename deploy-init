@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+#
+# deploy-init — Active le déploiement automatique (GitHub Actions → FTP/FTPS/SFTP)
+#               sur le projet du dossier courant.
+#
+# Usage :
+#   deploy-init            configure le projet du dossier courant
+#   deploy-init --apercu   liste les fichiers qui seront mis en ligne
+#
+set -euo pipefail
+
+CENTRAL_REPO="${DEPLOY_CENTRAL_REPO:-}"
+CENTRAL_REF="${DEPLOY_CENTRAL_REF:-main}"
+WORKFLOW_FILE=".github/workflows/deploy.yml"
+
+# Exclusions de sécurité, toujours appliquées (même liste que dans deploy.yml)
+SAFETY_EXCLUDES=('/.git/' '/.github/' '.env' '.env.*' 'node_modules/' '/.deployignore' '.deploy-state')
+
+err()  { printf '❌ %s\n' "$*" >&2; exit 1; }
+info() { printf '➜ %s\n' "$*" >&2; }
+ok()   { printf '✅ %s\n' "$*" >&2; }
+
+ask() {  # ask "Question" ["défaut"]
+  local prompt="$1" default="${2:-}" reply
+  if [ -n "$default" ]; then
+    read -rp "$prompt [$default] : " reply
+    printf '%s' "${reply:-$default}"
+  else
+    read -rp "$prompt : " reply
+    printf '%s' "$reply"
+  fi
+}
+confirm() { local r; read -rp "$1 [o/N] : " r; [[ "$r" =~ ^[oOyY]$ ]]; }
+
+# ======================================================================
+#  Mode aperçu : quels fichiers partiront en ligne ?
+# ======================================================================
+apercu() {
+  command -v rsync >/dev/null || err "rsync n'est pas installé (sudo apt install rsync)."
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || err "Ce dossier n'est pas un dépôt Git."
+  cd "$(git rev-parse --show-toplevel)"
+
+  local src="."
+  if [ -f "$WORKFLOW_FILE" ]; then
+    src="$(sed -n 's/^[[:space:]]*source-dir:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$WORKFLOW_FILE" | head -1)"
+    src="${src:-.}"
+  fi
+  src="${src#./}"; src="${src%/}"
+
+  git rev-parse --verify -q HEAD >/dev/null || err "Aucun commit : commite d'abord les fichiers du projet."
+
+  # Reproduit exactement ce que fait le déploiement : contenu du dernier commit,
+  # filtré récursivement par les exclusions de sécurité et .deployignore.
+  local excl snap tmpdest; excl="$(mktemp)"; snap="$(mktemp -d)"; tmpdest="$(mktemp -d)"
+  printf '%s\n' "${SAFETY_EXCLUDES[@]}" > "$excl"
+  git show HEAD:.deployignore 2>/dev/null | tr -d '\r' | grep -vE '^[[:space:]]*(#|$)' >> "$excl" || true
+  git archive --format=tar HEAD | tar -x -C "$snap"
+
+  info "Dossier mis en ligne : ${src}/   (contenu du dernier commit)"
+  local list
+  list="$(rsync -an --exclude-from="$excl" --out-format='%n' "$snap/" "$tmpdest/" \
+    | grep -v '/$' \
+    | { if [ "$src" = "." ]; then cat; else grep "^$src/" || true; fi } \
+    | LC_ALL=C sort || true)"
+  rm -rf "$excl" "$snap" "$tmpdest"
+
+  if [ -z "$list" ]; then
+    info "Aucun fichier ne sera mis en ligne."
+  else
+    printf '%s\n' "$list"
+    ok "$(printf '%s\n' "$list" | wc -l) fichier(s) seront mis en ligne."
+  fi
+  if [ -n "$(git status --porcelain)" ]; then
+    info "Attention : des modifications ne sont pas encore commitées, elles ne partiront pas."
+  fi
+}
+
+if [ "${1:-}" = "--apercu" ]; then apercu; exit 0; fi
+[ $# -eq 0 ] || err "Option inconnue : $1 (seule option : --apercu)"
+
+# ======================================================================
+#  Mode configuration
+# ======================================================================
+
+# ---------- Prérequis ----------
+command -v git >/dev/null || err "git n'est pas installé (sudo apt install git)."
+command -v gh  >/dev/null || err "GitHub CLI n'est pas installé (sudo apt install gh)."
+gh auth status >/dev/null 2>&1 || err "GitHub CLI non connecté : lance « gh auth login »."
+[ -n "$CENTRAL_REPO" ] || err "DEPLOY_CENTRAL_REPO n'est pas défini (ex. export DEPLOY_CENTRAL_REPO=monpseudo/deploy-workflows)."
+git config user.name  >/dev/null || err "Identité Git manquante : git config --global user.name \"Ton Nom\""
+git config user.email >/dev/null || err "Identité Git manquante : git config --global user.email \"toi@exemple.com\""
+gh api "repos/$CENTRAL_REPO/contents/.github/workflows/deploy.yml?ref=$CENTRAL_REF" >/dev/null 2>&1 \
+  || err "Workflow central introuvable dans $CENTRAL_REPO (branche $CENTRAL_REF)."
+
+# ---------- 1. Dépôt Git local ----------
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  info "Aucun dépôt Git dans $(pwd)."
+  confirm "Initialiser un dépôt Git ici ?" || err "Annulé."
+  git init -q -b main
+  ok "Dépôt Git initialisé."
+fi
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -f "$WORKFLOW_FILE" ] && ! confirm "$WORKFLOW_FILE existe déjà. L'écraser ?"; then
+  err "Annulé, rien n'a été modifié."
+fi
+
+# Sécurité : refuser de continuer si un .env est déjà suivi par Git
+TRACKED_ENV="$(git ls-files -- '.env' '.env.*' '**/.env' '**/.env.*' 2>/dev/null | grep -v '\.env\.example$' || true)"
+if [ -n "$TRACKED_ENV" ]; then
+  err "Fichier(s) sensible(s) déjà suivi(s) par Git : $TRACKED_ENV — retire-les d'abord (git rm --cached <fichier>)."
+fi
+
+# ---------- 2. Dépôt GitHub distant ----------
+if git remote get-url origin >/dev/null 2>&1; then
+  REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" \
+    || err "Le remote « origin » n'est pas un dépôt GitHub accessible."
+else
+  REPO_NAME="$(ask "Nom du dépôt GitHub à créer" "$(basename "$PWD")")"
+  [ -n "$REPO_NAME" ] || err "Nom de dépôt requis."
+  VIS="$(ask "Visibilité (private/public)" "private")"
+  [[ "$VIS" =~ ^(private|public)$ ]] || err "Visibilité invalide."
+  gh repo create "$REPO_NAME" "--$VIS" --source=. --remote=origin >/dev/null
+  REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+  ok "Dépôt GitHub créé : $REPO"
+fi
+info "Projet : $REPO"
+
+# ---------- 3. Paramètres ----------
+CURRENT_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo main)"
+BRANCH="$(ask "Branche qui déclenche le déploiement" "$CURRENT_BRANCH")"
+
+SOURCE_DIR="$(ask "Dossier du projet à mettre en ligne (. = tout le projet)" ".")"
+SOURCE_DIR="${SOURCE_DIR#./}"; SOURCE_DIR="${SOURCE_DIR%/}"; SOURCE_DIR="${SOURCE_DIR:-.}"
+case "$SOURCE_DIR" in /*|*..*) err "Le dossier doit être relatif au projet, sans '..'." ;; esac
+[ -d "$SOURCE_DIR" ] || info "Attention : le dossier « $SOURCE_DIR » n'existe pas encore."
+
+PROTOCOL="$(ask "Protocole (ftp/ftps/sftp)" "ftps")"
+[[ "$PROTOCOL" =~ ^(ftp|ftps|sftp)$ ]] || err "Protocole invalide."
+if [ "$PROTOCOL" = "sftp" ]; then DEFAULT_PORT=22; DEFAULT_DIR="public_html/"; else DEFAULT_PORT=21; DEFAULT_DIR="/public_html/"; fi
+PORT="$(ask "Port" "$DEFAULT_PORT")"
+[[ "$PORT" =~ ^[0-9]+$ ]] || err "Port invalide."
+
+FTP_SERVER="$(ask "Hôte (ex. ftp.mondomaine.com)")"
+FTP_USERNAME="$(ask "Identifiant")"
+read -rsp "Mot de passe (masqué) : " FTP_PASSWORD; echo >&2
+FTP_SERVER_DIR="$(ask "Dossier distant" "$DEFAULT_DIR")"
+for v in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_SERVER_DIR; do
+  [ -n "${!v}" ] || err "$v ne peut pas être vide."
+done
+FTP_SERVER_DIR="${FTP_SERVER_DIR%/}/"
+
+PHP_LINT=false
+if confirm "Bloquer le déploiement en cas d'erreur de syntaxe PHP ?"; then PHP_LINT=true; fi
+
+# ---------- 4. Secrets GitHub (envoyés via stdin, jamais en argument) ----------
+info "Enregistrement des secrets dans $REPO…"
+for v in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_SERVER_DIR; do
+  printf '%s' "${!v}" | gh secret set "$v" --repo "$REPO" >/dev/null
+done
+unset FTP_PASSWORD
+ok "Secrets enregistrés."
+
+# ---------- 5. Workflow du projet ----------
+mkdir -p "$(dirname "$WORKFLOW_FILE")"
+cat > "$WORKFLOW_FILE" <<EOF
+name: Déploiement
+
+on:
+  push:
+    branches: ["$BRANCH"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: $CENTRAL_REPO/.github/workflows/deploy.yml@$CENTRAL_REF
+    with:
+      protocol: $PROTOCOL
+      port: $PORT
+      source-dir: "$SOURCE_DIR"
+      php-lint: $PHP_LINT
+    secrets: inherit
+EOF
+ok "Workflow créé : $WORKFLOW_FILE"
+
+# ---------- 6. .deployignore (filtre de ce qui part en ligne) ----------
+if [ ! -f .deployignore ]; then
+  cat > .deployignore <<'EOF'
+# ============================================================
+#  .deployignore — fichiers et dossiers à NE PAS mettre en ligne
+#  (ils restent dans Git, mais ne sont jamais envoyés au serveur)
+#
+#  Syntaxe (comme .gitignore) :
+#    /docs/        le dossier docs à la racine du projet
+#    tests/        tout dossier nommé tests, où qu'il soit
+#    *.md          tous les fichiers Markdown
+#    /schema.sql   ce fichier précis à la racine
+#
+#  Toujours exclus automatiquement : .git, .github, .env*, node_modules
+#  Vérifier le résultat :  deploy-init --apercu
+# ============================================================
+
+*.md
+EOF
+  ok "Fichier .deployignore créé (à compléter selon ton projet)."
+fi
+
+# ---------- 7. .gitignore ----------
+touch .gitignore
+if [ -s .gitignore ] && [ -n "$(tail -c1 .gitignore)" ]; then echo >> .gitignore; fi
+for p in ".env" ".env.*" "!.env.example" "node_modules/"; do
+  grep -qxF -- "$p" .gitignore || echo "$p" >> .gitignore
+done
+
+# ---------- 8. Vérification avant commit ----------
+info "Ouvre maintenant .deployignore pour choisir ce qui NE doit PAS partir en ligne."
+read -rp "Appuie sur Entrée quand c'est fait… " _
+
+# ---------- 9. Commit ----------
+git add .gitignore .deployignore "$WORKFLOW_FILE"
+if git diff --cached --quiet; then
+  info "Aucun changement à commiter."
+else
+  git commit -q -m "ci: configuration du déploiement automatique"
+  ok "Commit créé."
+fi
+
+if command -v rsync >/dev/null; then
+  apercu
+else
+  info "Installe rsync (sudo apt install rsync) pour utiliser « deploy-init --apercu »."
+fi
+
+# ---------- 10. Push ----------
+CURRENT_BRANCH="$(git symbolic-ref --short HEAD)"
+if confirm "Pousser « $CURRENT_BRANCH » maintenant ?"; then
+  git push -u origin "$CURRENT_BRANCH"
+  if [ "$CURRENT_BRANCH" = "$BRANCH" ]; then
+    ok "Déploiement lancé. Suivi : gh run watch (ou onglet Actions de $REPO)"
+  else
+    info "Pas de déploiement : il se déclenche uniquement sur « $BRANCH »."
+  fi
+else
+  info "Plus tard : git push -u origin $CURRENT_BRANCH"
+fi
