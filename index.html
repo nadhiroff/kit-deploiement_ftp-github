@@ -439,7 +439,7 @@ gh repo create deploy-workflows --private --source=. --push
 cd ~</pre></div>
 
 <h3 id="central-acces">Autoriser tes projets à l'utiliser</h3>
-<p>Sans ce réglage, chaque déploiement échoue avec <code>workflow was not found</code>. C'est l'erreur qu'on a eue sur <code>summary</code>.</p>
+<p>Sans ce réglage, chaque déploiement échoue avec <code>workflow was not found</code>. C'est l'erreur la plus fréquente au premier déploiement d'un projet.</p>
 <div class="cmd"><pre>gh api -X PUT repos/nadhiroff/deploy-workflows/actions/permissions/access -f access_level=user</pre></div>
 <div class="cmd"><pre>gh api repos/nadhiroff/deploy-workflows/actions/permissions/access</pre></div>
 <div class="out"><div class="lbl">Résultat attendu</div><pre>{
@@ -471,7 +471,7 @@ fi</pre></div>
 <h2 id="choisir">Quel est ton cas ?</h2>
 <p>Choisis la situation qui correspond à ton projet. Chaque cas est complet du début à la fin.</p>
 <div class="pick">
-  <a href="#cas-a"><span class="l">A</span><b>Nouveau projet</b><span>Pas de dépôt GitHub, rien sur le serveur. Ex. <code>summary</code>.</span></a>
+  <a href="#cas-a"><span class="l">A</span><b>Nouveau projet</b><span>Pas de dépôt GitHub, rien sur le serveur. Ex. un dossier <code>mon-site</code> tout neuf.</span></a>
   <a href="#cas-b"><span class="l">B</span><b>Dépôt GitHub déjà créé</b><span>Le dépôt existe, mais pas encore de dossier sur ton PC ni sur le serveur.</span></a>
   <a href="#cas-c"><span class="l">C</span><b>Projet déjà en ligne</b><span>Sur GitHub, sur ton PC et sur le serveur. Ex. <code>calculateur_performance</code>.</span></a>
   <a href="#cas-d"><span class="l">D</span><b>Seulement sur le serveur</b><span>Le site est en ligne mais tu n'as ni copie locale ni Git.</span></a>
@@ -541,7 +541,7 @@ Appuie sur Entrée quand c'est fait…</pre></div>
 
 <div class="step"><div class="n">4</div><div>
   <h4>Répondre <b>N</b> à « Pousser maintenant ? »</h4>
-  <p>À ce stade, seuls les fichiers de configuration sont commités. Tes pages HTML ne sont <b>pas encore</b> dans Git. C'est le piège rencontré avec <code>summary</code> : le premier push n'envoyait rien d'utile.</p>
+  <p>À ce stade, seuls les fichiers de configuration sont commités. Tes pages HTML ne sont <b>pas encore</b> dans Git. Si tu pousses maintenant, le premier déploiement n'enverra rien d'utile sur le serveur.</p>
   <div class="out"><div class="lbl">Simulation</div><pre>✅ Commit créé.
 ➜ Aucun fichier ne sera mis en ligne.
 Pousser « main » maintenant ? [o/N] : N
